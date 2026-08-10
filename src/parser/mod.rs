@@ -3635,7 +3635,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let (field_type, trailing_bracket) = self.parse_data_type_helper()?;
+        let (field_type, trailing_bracket) = self.parse_data_type_with_optional_collation()?;
 
         let options = self.maybe_parse_options(Keyword::OPTIONS)?;
         Ok((
@@ -5225,6 +5225,9 @@ impl<'a> Parser<'a> {
     /// Parse a SQL CREATE statement
     pub fn parse_create(&mut self) -> Result<Statement, ParserError> {
         let or_replace = self.parse_keywords(&[Keyword::OR, Keyword::REPLACE]);
+        let or_refresh = !or_replace
+            && self.dialect.supports_create_or_refresh()
+            && self.parse_keywords(&[Keyword::OR, Keyword::REFRESH]);
         let or_alter = self.parse_keywords(&[Keyword::OR, Keyword::ALTER]);
         let multiset = self.maybe_parse_multiset();
         let local = self.parse_one_of_keywords(&[Keyword::LOCAL]).is_some();
@@ -5252,9 +5255,23 @@ impl<'a> Parser<'a> {
             self.parse_create_snapshot_table().map(Into::into)
         } else if self.peek_keywords(&[Keyword::TEXT, Keyword::SEARCH]) {
             self.parse_create_text_search().map(Into::into)
+        } else if self.dialect.supports_streaming_tables()
+            && self.parse_keywords(&[Keyword::STREAMING, Keyword::TABLE])
+        {
+            self.parse_create_table(
+                or_replace, or_refresh, true, temporary, unlogged, global, transient, volatile,
+                multiset,
+            )
+            .map(Into::into)
+        } else if or_refresh && self.peek_keyword(Keyword::TABLE) {
+            self.expected_ref(
+                "STREAMING TABLE or MATERIALIZED VIEW after CREATE OR REFRESH",
+                self.peek_token_ref(),
+            )
         } else if self.parse_keyword(Keyword::TABLE) {
             self.parse_create_table(
-                or_replace, temporary, unlogged, global, transient, volatile, multiset,
+                or_replace, or_refresh, false, temporary, unlogged, global, transient, volatile,
+                multiset,
             )
             .map(Into::into)
         } else if self.peek_keyword(Keyword::MATERIALIZED)
@@ -5262,10 +5279,20 @@ impl<'a> Parser<'a> {
             || self.peek_keywords(&[Keyword::SECURE, Keyword::MATERIALIZED, Keyword::VIEW])
             || self.peek_keywords(&[Keyword::SECURE, Keyword::VIEW])
         {
-            self.parse_create_view(or_alter, or_replace, temporary, create_view_params)
-                .map(Into::into)
+            self.parse_create_view(
+                or_alter,
+                or_replace,
+                or_refresh,
+                temporary,
+                create_view_params,
+            )
+            .map(Into::into)
         } else if self.parse_keyword(Keyword::POLICY) {
             self.parse_create_policy().map(Into::into)
+        } else if self.dialect.supports_databricks_create_objects()
+            && self.is_databricks_create_object()
+        {
+            self.parse_databricks_create_object(or_replace)
         } else if self.parse_keyword(Keyword::EXTERNAL) {
             self.parse_create_external_table(or_replace).map(Into::into)
         } else if self.parse_keyword(Keyword::FUNCTION) {
@@ -5329,6 +5356,107 @@ impl<'a> Parser<'a> {
         } else {
             self.expected_ref("an object type after CREATE", self.peek_token_ref())
         }
+    }
+
+    fn token_is_word(token: &Token, expected: &str) -> bool {
+        matches!(token, Token::Word(word) if word.value.eq_ignore_ascii_case(expected))
+    }
+
+    fn peek_word(&self, offset: usize, expected: &str) -> bool {
+        Self::token_is_word(&self.peek_nth_token_ref(offset).token, expected)
+    }
+
+    fn is_databricks_create_object(&self) -> bool {
+        self.peek_word(0, "FLOW")
+            || self.peek_word(0, "CATALOG")
+            || (self.peek_word(0, "SCHEMA")
+                && self.has_word_before_statement_end(&["COMMENT", "LOCATION", "DBPROPERTIES"]))
+            || self.peek_word(0, "VOLUME")
+            || self.peek_word(0, "CONNECTION")
+            || self.peek_word(0, "SHARE")
+            || self.peek_word(0, "RECIPIENT")
+            || self.peek_word(0, "PROVIDER")
+            || (self.peek_word(0, "EXTERNAL")
+                && (self.peek_word(1, "VOLUME") || self.peek_word(1, "LOCATION")))
+            || (self.peek_word(0, "STORAGE") && self.peek_word(1, "CREDENTIAL"))
+            || (self.peek_word(0, "FOREIGN") && self.peek_word(1, "CATALOG"))
+    }
+
+    fn has_word_before_statement_end(&self, expected: &[&str]) -> bool {
+        for offset in 0.. {
+            let token = &self.peek_nth_token_ref(offset).token;
+            if matches!(token, Token::SemiColon | Token::EOF) {
+                return false;
+            }
+            if expected
+                .iter()
+                .any(|expected| Self::token_is_word(token, expected))
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn parse_databricks_create_object(
+        &mut self,
+        or_replace: bool,
+    ) -> Result<Statement, ParserError> {
+        let first = self.parse_identifier()?.value.to_ascii_uppercase();
+        let kind = match first.as_str() {
+            "FLOW" => DatabricksObjectKind::Flow,
+            "CATALOG" => DatabricksObjectKind::Catalog,
+            "SCHEMA" => DatabricksObjectKind::Schema,
+            "VOLUME" => DatabricksObjectKind::Volume,
+            "CONNECTION" => DatabricksObjectKind::Connection,
+            "SHARE" => DatabricksObjectKind::Share,
+            "RECIPIENT" => DatabricksObjectKind::Recipient,
+            "PROVIDER" => DatabricksObjectKind::Provider,
+            "EXTERNAL" => match self.parse_identifier()?.value.to_ascii_uppercase().as_str() {
+                "VOLUME" => DatabricksObjectKind::ExternalVolume,
+                "LOCATION" => DatabricksObjectKind::ExternalLocation,
+                _ => {
+                    return self
+                        .expected_ref("VOLUME or LOCATION after EXTERNAL", self.peek_token_ref())
+                }
+            },
+            "STORAGE" => {
+                let credential = self.parse_identifier()?;
+                debug_assert!(credential.value.eq_ignore_ascii_case("CREDENTIAL"));
+                DatabricksObjectKind::StorageCredential
+            }
+            "FOREIGN" => {
+                let catalog = self.parse_identifier()?;
+                debug_assert!(catalog.value.eq_ignore_ascii_case("CATALOG"));
+                DatabricksObjectKind::ForeignCatalog
+            }
+            _ => {
+                return self.expected_ref(
+                    "a Databricks governance or Lakeflow object type",
+                    self.peek_token_ref(),
+                )
+            }
+        };
+        let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+        let name = self.parse_object_name(false)?;
+        let mut clauses = Vec::new();
+        while !matches!(self.peek_token_ref().token, Token::SemiColon | Token::EOF) {
+            clauses.push(self.next_token().token);
+        }
+        if kind == DatabricksObjectKind::Flow
+            && !clauses
+                .first()
+                .is_some_and(|token| Self::token_is_word(token, "AS"))
+        {
+            return self.expected_ref("AS after CREATE FLOW name", self.peek_token_ref());
+        }
+        Ok(Statement::CreateDatabricksObject(CreateDatabricksObject {
+            or_replace,
+            kind,
+            if_not_exists,
+            name,
+            clauses,
+        }))
     }
 
     fn parse_text_search_object_type(&mut self) -> Result<TextSearchObjectType, ParserError> {
@@ -5792,7 +5920,10 @@ impl<'a> Parser<'a> {
         or_replace: bool,
         temporary: bool,
     ) -> Result<Statement, ParserError> {
-        if dialect_of!(self is HiveDialect) {
+        if self.dialect.supports_databricks_create_routines() {
+            self.parse_databricks_create_function(or_replace, temporary)
+                .map(Into::into)
+        } else if dialect_of!(self is HiveDialect) {
             self.parse_hive_create_function(or_replace, temporary)
                 .map(Into::into)
         } else if dialect_of!(self is PostgreSqlDialect | GenericDialect) {
@@ -5810,6 +5941,71 @@ impl<'a> Parser<'a> {
             self.prev_token();
             self.expected_ref("an object type after CREATE", self.peek_token_ref())
         }
+    }
+
+    fn parse_databricks_create_function(
+        &mut self,
+        or_replace: bool,
+        temporary: bool,
+    ) -> Result<CreateFunction, ParserError> {
+        let name = self.parse_object_name(false)?;
+        self.expect_token(&Token::LParen)?;
+        let args = if self.peek_token_ref().token == Token::RParen {
+            Vec::new()
+        } else {
+            self.parse_comma_separated(Parser::parse_function_arg)?
+        };
+        self.expect_token(&Token::RParen)?;
+        self.expect_keyword_is(Keyword::RETURNS)?;
+        let return_type = Some(self.parse_function_return_type()?);
+
+        let mut language = None;
+        let mut determinism_specifier = None;
+        let mut function_body = None;
+        loop {
+            if self.parse_keyword(Keyword::LANGUAGE) {
+                language = Some(self.parse_identifier()?);
+            } else if self.parse_keyword(Keyword::DETERMINISTIC) {
+                determinism_specifier = Some(FunctionDeterminismSpecifier::Deterministic);
+            } else if self.parse_keywords(&[Keyword::CONTAINS, Keyword::SQL]) {
+                // The existing function AST has no SQL data-access field yet.
+            } else if self.parse_keyword(Keyword::COMMENT) {
+                let _ = self.parse_comment_value()?;
+            } else if self.parse_keyword(Keyword::RETURN) {
+                function_body = if self.peek_keyword(Keyword::SELECT) {
+                    Some(CreateFunctionBody::AsReturnSelect(self.parse_select()?))
+                } else {
+                    Some(CreateFunctionBody::Return(self.parse_expr()?))
+                };
+                break;
+            } else {
+                break;
+            }
+        }
+        if function_body.is_none() {
+            return self.expected_ref("RETURN in CREATE FUNCTION", self.peek_token_ref());
+        }
+
+        Ok(CreateFunction {
+            or_alter: false,
+            or_replace,
+            temporary,
+            if_not_exists: false,
+            name,
+            args: Some(args),
+            return_type,
+            function_body,
+            language,
+            determinism_specifier,
+            options: None,
+            remote_connection: None,
+            using: None,
+            behavior: None,
+            called_on_null: None,
+            parallel: None,
+            security: None,
+            set_params: vec![],
+        })
     }
 
     /// Parse `CREATE FUNCTION` for [PostgreSQL]
@@ -6730,11 +6926,18 @@ impl<'a> Parser<'a> {
         &mut self,
         or_alter: bool,
         or_replace: bool,
+        or_refresh: bool,
         temporary: bool,
         create_view_params: Option<CreateViewParams>,
     ) -> Result<CreateView, ParserError> {
         let secure = self.parse_keyword(Keyword::SECURE);
         let materialized = self.parse_keyword(Keyword::MATERIALIZED);
+        if or_refresh && !materialized {
+            return self.expected_ref(
+                "MATERIALIZED VIEW after CREATE OR REFRESH",
+                self.peek_token_ref(),
+            );
+        }
         self.expect_keyword_is(Keyword::VIEW)?;
         let allow_unquoted_hyphen = dialect_of!(self is BigQueryDialect);
         // Tries to parse IF NOT EXISTS either before name or after name
@@ -6748,12 +6951,21 @@ impl<'a> Parser<'a> {
         let mut copy_grants = self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]);
         // Many dialects support `OR ALTER` right after `CREATE`, but we don't (yet).
         // ANSI SQL and Postgres support RECURSIVE here, but we don't support it either.
-        let columns = self.parse_view_columns()?;
+        let columns = self.parse_view_columns(materialized)?;
         // Snowflake also documents `COPY GRANTS` *after* the column list; accept
         // either position, but not both.
         // <https://docs.snowflake.com/en/sql-reference/sql/create-view#syntax>
         if !copy_grants {
             copy_grants = self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]);
+        }
+        if self.dialect.supports_create_view_schema_mode()
+            && self.parse_keywords(&[Keyword::WITH, Keyword::SCHEMA])
+        {
+            self.expect_one_of_keywords(&[
+                Keyword::BINDING,
+                Keyword::COMPENSATION,
+                Keyword::EVOLUTION,
+            ])?;
         }
         let mut options = CreateTableOptions::None;
         let with_options = self.parse_options(Keyword::WITH)?;
@@ -6787,11 +6999,22 @@ impl<'a> Parser<'a> {
         let comment = if self.dialect.supports_create_view_comment_syntax()
             && self.parse_keyword(Keyword::COMMENT)
         {
-            self.expect_token(&Token::Eq)?;
+            if !self.dialect.supports_create_view_comment_without_equals() {
+                self.expect_token(&Token::Eq)?;
+            } else {
+                let _ = self.consume_token(&Token::Eq);
+            }
             Some(self.parse_comment_value()?)
         } else {
             None
         };
+
+        if self.dialect.supports_create_view_table_properties() {
+            let table_properties = self.parse_options(Keyword::TBLPROPERTIES)?;
+            if !table_properties.is_empty() {
+                options = CreateTableOptions::TableProperties(table_properties);
+            }
+        }
 
         self.expect_keyword_is(Keyword::AS)?;
         let query = self.parse_query()?;
@@ -6813,6 +7036,7 @@ impl<'a> Parser<'a> {
             materialized,
             secure,
             or_replace,
+            or_refresh,
             options,
             cluster_by,
             comment,
@@ -8691,6 +8915,8 @@ impl<'a> Parser<'a> {
     pub fn parse_create_table(
         &mut self,
         or_replace: bool,
+        or_refresh: bool,
+        streaming: bool,
         temporary: bool,
         unlogged: bool,
         global: Option<bool>,
@@ -8735,15 +8961,24 @@ impl<'a> Parser<'a> {
 
         let like = self.maybe_parse_create_table_like(allow_unquoted_hyphen)?;
 
+        if self.dialect.supports_create_table_clone_version() {
+            let _ = self.parse_one_of_keywords(&[Keyword::SHALLOW, Keyword::DEEP]);
+        }
         let clone = if self.parse_keyword(Keyword::CLONE) {
             self.parse_object_name(allow_unquoted_hyphen).ok()
         } else {
             None
         };
 
+        let version = if clone.is_some() && self.dialect.supports_create_table_clone_version() {
+            self.maybe_parse_table_version()?
+        } else {
+            None
+        };
+
         // parse optional column list (schema)
         let (columns, constraints) = self.parse_columns()?;
-        let comment_after_column_def =
+        let mut comment_after_column_def =
             if dialect_of!(self is HiveDialect) && self.parse_keyword(Keyword::COMMENT) {
                 let next_token = self.next_token();
                 match next_token.token {
@@ -8771,9 +9006,25 @@ impl<'a> Parser<'a> {
         // SQLite supports `WITHOUT ROWID` at the end of `CREATE TABLE`
         let without_rowid = self.parse_keywords(&[Keyword::WITHOUT, Keyword::ROWID]);
 
-        let hive_distribution = self.parse_hive_distribution()?;
+        let mut hive_distribution = self.parse_hive_distribution()?;
         let clustered_by = self.parse_optional_clustered_by()?;
         let hive_formats = self.parse_hive_formats()?;
+
+        if matches!(hive_distribution, HiveDistributionStyle::NONE)
+            && self
+                .dialect
+                .supports_create_table_distribution_after_format()
+        {
+            hive_distribution = self.parse_hive_distribution()?;
+        }
+
+        if comment_after_column_def.is_none()
+            && self.dialect.supports_create_table_comment_after_format()
+            && hive_formats.is_some()
+            && self.parse_keyword(Keyword::COMMENT)
+        {
+            comment_after_column_def = Some(CommentDef::WithoutEq(self.parse_comment_value()?));
+        }
 
         let create_table_config = self.parse_optional_create_table_config()?;
 
@@ -8865,6 +9116,18 @@ impl<'a> Parser<'a> {
             None
         };
 
+        let watermark = if streaming
+            && self.dialect.supports_watermark_clause()
+            && self.parse_keyword(Keyword::WATERMARK)
+        {
+            let event_time = self.parse_expr()?;
+            self.expect_keywords(&[Keyword::DELAY, Keyword::OF])?;
+            let delay = self.parse_expr()?;
+            Some(Watermark { event_time, delay })
+        } else {
+            None
+        };
+
         // `WITH DATA` clause only applies if there is a query body.
         let with_data = if query.is_some() {
             self.maybe_parse_with_data()?
@@ -8878,6 +9141,8 @@ impl<'a> Parser<'a> {
             .columns(columns)
             .constraints(constraints)
             .or_replace(or_replace)
+            .or_refresh(or_refresh)
+            .streaming(streaming)
             .if_not_exists(if_not_exists)
             .transient(transient)
             .volatile(volatile)
@@ -8887,9 +9152,11 @@ impl<'a> Parser<'a> {
             .hive_formats(hive_formats)
             .global(global)
             .query(query)
+            .watermark(watermark)
             .without_rowid(without_rowid)
             .like(like)
             .clone_clause(clone)
+            .version(version)
             .comment_after_column_def(comment_after_column_def)
             .order_by(order_by)
             .on_commit(on_commit)
@@ -9103,7 +9370,9 @@ impl<'a> Parser<'a> {
         };
 
         let mut cluster_by = None;
-        if dialect_of!(self is BigQueryDialect | GenericDialect) {
+        if dialect_of!(self is BigQueryDialect | GenericDialect)
+            || self.dialect.supports_create_table_cluster_by()
+        {
             if self.parse_keywords(&[Keyword::CLUSTER, Keyword::BY]) {
                 cluster_by = Some(WrappedCollection::NoWrapping(
                     self.parse_comma_separated(|p| p.parse_expr())?,
@@ -10507,7 +10776,11 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let name = self.parse_identifier()?;
-                self.expect_token(&Token::Eq)?;
+                if !self.consume_token(&Token::Eq)
+                    && !self.dialect.supports_options_without_equals()
+                {
+                    return self.expected_ref("=", self.peek_token_ref());
+                }
                 let value = self.parse_expr()?;
 
                 Ok(SqlOption::KeyValue { key: name, value })
@@ -13123,9 +13396,17 @@ impl<'a> Parser<'a> {
                 }
                 Keyword::MAP if self.dialect.supports_map_literal_with_angle_brackets() => {
                     self.expect_token(&Token::Lt)?;
-                    let key_data_type = self.parse_data_type()?;
+                    let (key_data_type, key_trailing_bracket) =
+                        self.parse_data_type_with_optional_collation()?;
+                    if key_trailing_bracket.0 {
+                        return parser_err!(
+                            format!("unmatched > after parsing data type {key_data_type}"),
+                            self.peek_token_ref()
+                        );
+                    }
                     self.expect_token(&Token::Comma)?;
-                    let (value_data_type, _trailing_bracket) = self.parse_data_type_helper()?;
+                    let (value_data_type, _trailing_bracket) =
+                        self.parse_data_type_with_optional_collation()?;
                     trailing_bracket = self.expect_closing_angle_bracket(_trailing_bracket)?;
                     Ok(DataType::Map(
                         Box::new(key_data_type),
@@ -13224,6 +13505,16 @@ impl<'a> Parser<'a> {
         }
 
         Ok((data, trailing_bracket))
+    }
+
+    fn parse_data_type_with_optional_collation(
+        &mut self,
+    ) -> Result<(DataType, MatchedTrailingBracket), ParserError> {
+        let (mut data_type, trailing_bracket) = self.parse_data_type_helper()?;
+        if self.dialect.supports_data_type_collation() && self.parse_keyword(Keyword::COLLATE) {
+            data_type = DataType::Collate(Box::new(data_type), self.parse_object_name(false)?);
+        }
+        Ok((data_type, trailing_bracket))
     }
 
     fn parse_returns_table_column(&mut self) -> Result<ColumnDef, ParserError> {
@@ -13917,17 +14208,28 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses a parenthesized, comma-separated list of column definitions within a view.
-    fn parse_view_columns(&mut self) -> Result<Vec<ViewColumnDef>, ParserError> {
+    fn parse_view_columns(
+        &mut self,
+        materialized: bool,
+    ) -> Result<Vec<ViewColumnDef>, ParserError> {
         if self.consume_token(&Token::LParen) {
             if self.peek_token_ref().token == Token::RParen {
                 self.next_token();
                 Ok(vec![])
             } else {
-                let cols = self.parse_comma_separated_with_trailing_commas(
-                    Parser::parse_view_column,
-                    self.dialect.supports_column_definition_trailing_commas(),
-                    Self::is_reserved_for_column_alias,
-                )?;
+                let cols = if materialized && self.dialect.supports_typed_view_columns() {
+                    self.parse_comma_separated_with_trailing_commas(
+                        Parser::parse_typed_view_column,
+                        self.dialect.supports_column_definition_trailing_commas(),
+                        Self::is_reserved_for_column_alias,
+                    )?
+                } else {
+                    self.parse_comma_separated_with_trailing_commas(
+                        Parser::parse_view_column,
+                        self.dialect.supports_column_definition_trailing_commas(),
+                        Self::is_reserved_for_column_alias,
+                    )?
+                };
                 self.expect_token(&Token::RParen)?;
                 Ok(cols)
             }
@@ -13945,6 +14247,17 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
+        Ok(ViewColumnDef {
+            name,
+            data_type,
+            options,
+        })
+    }
+
+    fn parse_typed_view_column(&mut self) -> Result<ViewColumnDef, ParserError> {
+        let name = self.parse_identifier()?;
+        let data_type = Some(self.parse_data_type()?);
+        let options = self.parse_view_column_options()?;
         Ok(ViewColumnDef {
             name,
             data_type,
@@ -15585,6 +15898,29 @@ impl<'a> Parser<'a> {
 
     /// Parse `CREATE TABLE x AS TABLE y`
     pub fn parse_as_table(&mut self) -> Result<Table, ParserError> {
+        if self.dialect.supports_multipart_table_query_name() {
+            let mut parts = self.parse_object_name(false)?.0;
+            let table_name = parts
+                .pop()
+                .expect("object names always contain at least one part")
+                .to_string();
+            let schema_name = if parts.is_empty() {
+                None
+            } else {
+                Some(
+                    parts
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join("."),
+                )
+            };
+            return Ok(Table {
+                table_name: Some(table_name),
+                schema_name,
+            });
+        }
+
         let token1 = self.next_token();
         let token2 = self.next_token();
         let token3 = self.next_token();
@@ -20434,6 +20770,10 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
+
+        if self.dialect.supports_databricks_create_routines() {
+            let _ = self.parse_keywords(&[Keyword::SQL, Keyword::SECURITY, Keyword::INVOKER]);
+        }
 
         self.expect_keyword_is(Keyword::AS)?;
 

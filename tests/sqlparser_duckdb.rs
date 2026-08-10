@@ -701,6 +701,7 @@ fn test_duckdb_union_datatype() {
     assert_eq!(
         Statement::CreateTable(CreateTable {
             or_replace: Default::default(),
+            or_refresh: Default::default(),
             temporary: Default::default(),
             unlogged: Default::default(),
             external: Default::default(),
@@ -711,6 +712,7 @@ fn test_duckdb_union_datatype() {
             iceberg: Default::default(),
             snapshot: false,
             dynamic: Default::default(),
+            streaming: Default::default(),
             name: ObjectName::from(vec!["tbl1".into()]),
             columns: vec![
                 ColumnDef {
@@ -753,6 +755,7 @@ fn test_duckdb_union_datatype() {
             file_format: Default::default(),
             location: Default::default(),
             query: Default::default(),
+            watermark: Default::default(),
             without_rowid: Default::default(),
             like: Default::default(),
             clone: Default::default(),

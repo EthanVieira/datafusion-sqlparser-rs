@@ -1065,6 +1065,103 @@ pub trait Dialect: Debug + Any {
         false
     }
 
+    /// Returns true if `CREATE VIEW` accepts `COMMENT '<text>'` without an
+    /// equals sign.
+    fn supports_create_view_comment_without_equals(&self) -> bool {
+        false
+    }
+
+    /// Returns true if this dialect supports typed column definitions in
+    /// `CREATE VIEW`, followed by ordinary column options.
+    ///
+    /// Example:
+    /// ```sql
+    /// CREATE MATERIALIZED VIEW v (id BIGINT COMMENT 'identifier') AS SELECT 1;
+    /// ```
+    fn supports_typed_view_columns(&self) -> bool {
+        false
+    }
+
+    /// Returns true if `CREATE VIEW` accepts a `TBLPROPERTIES` clause.
+    fn supports_create_view_table_properties(&self) -> bool {
+        false
+    }
+
+    /// Returns true if the dialect supports `CREATE OR REFRESH` for
+    /// materialized views and streaming tables.
+    fn supports_create_or_refresh(&self) -> bool {
+        false
+    }
+
+    /// Returns true if the dialect supports `CREATE [OR REFRESH] STREAMING TABLE`.
+    fn supports_streaming_tables(&self) -> bool {
+        false
+    }
+
+    /// Returns true if a streaming table query can end with a Databricks
+    /// `WATERMARK column DELAY OF interval` clause.
+    fn supports_watermark_clause(&self) -> bool {
+        false
+    }
+
+    /// Returns true if `TABLE` queries accept names with more than two parts.
+    fn supports_multipart_table_query_name(&self) -> bool {
+        false
+    }
+
+    /// Returns true if `CREATE TABLE` accepts a `CLUSTER BY` clause.
+    fn supports_create_table_cluster_by(&self) -> bool {
+        false
+    }
+
+    /// Returns true if options may omit the equals sign between key and value.
+    ///
+    /// Example: `OPTIONS (path 's3://bucket/data')`.
+    fn supports_options_without_equals(&self) -> bool {
+        false
+    }
+
+    /// Returns true if `CREATE TABLE ... USING ... PARTITIONED BY ...` is
+    /// accepted, with the distribution clause following the storage format.
+    fn supports_create_table_distribution_after_format(&self) -> bool {
+        false
+    }
+
+    /// Returns true if a table comment may follow the storage format.
+    fn supports_create_table_comment_after_format(&self) -> bool {
+        false
+    }
+
+    /// Returns true if table clones accept an optional `SHALLOW` or `DEEP`
+    /// modifier and `VERSION | TIMESTAMP AS OF` suffix.
+    fn supports_create_table_clone_version(&self) -> bool {
+        false
+    }
+
+    /// Returns true if views accept `WITH SCHEMA BINDING`, `WITH SCHEMA
+    /// COMPENSATION`, or `WITH SCHEMA EVOLUTION` before `AS`.
+    fn supports_create_view_schema_mode(&self) -> bool {
+        false
+    }
+
+    /// Returns true if this dialect supports Databricks governance and
+    /// Lakeflow object definitions such as `CREATE CATALOG` and `CREATE FLOW`.
+    fn supports_databricks_create_objects(&self) -> bool {
+        false
+    }
+
+    /// Returns true if Databricks SQL function and procedure syntax is
+    /// supported.
+    fn supports_databricks_create_routines(&self) -> bool {
+        false
+    }
+
+    /// Returns true if a data type can carry a collation, including inside a
+    /// nested type such as `MAP<STRING COLLATE UTF8_BINARY, STRING>`.
+    fn supports_data_type_collation(&self) -> bool {
+        false
+    }
+
     /// Returns true if this dialect supports the `ARRAY` type without
     /// specifying an element type.
     ///

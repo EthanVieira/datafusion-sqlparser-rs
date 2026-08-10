@@ -8487,6 +8487,7 @@ fn parse_create_view() {
             name_before_not_exists: _,
             secure: _,
             copy_grants: _,
+            or_refresh: _,
         }) => {
             assert_eq!(or_alter, false);
             assert_eq!("myschema.myview", name.to_string());
@@ -8606,6 +8607,7 @@ fn parse_create_view_temporary() {
             name_before_not_exists: _,
             secure: _,
             copy_grants: _,
+            or_refresh: _,
         }) => {
             assert_eq!(or_alter, false);
             assert_eq!("myschema.myview", name.to_string());
@@ -8648,6 +8650,7 @@ fn parse_create_or_replace_view() {
             name_before_not_exists: _,
             secure: _,
             copy_grants: _,
+            or_refresh: _,
         }) => {
             assert_eq!(or_alter, false);
             assert_eq!("v", name.to_string());
@@ -8694,6 +8697,7 @@ fn parse_create_or_replace_materialized_view() {
             name_before_not_exists: _,
             secure: _,
             copy_grants: _,
+            or_refresh: _,
         }) => {
             assert_eq!(or_alter, false);
             assert_eq!("v", name.to_string());
@@ -8736,6 +8740,7 @@ fn parse_create_materialized_view() {
             name_before_not_exists: _,
             secure: _,
             copy_grants: _,
+            or_refresh: _,
         }) => {
             assert_eq!(or_alter, false);
             assert_eq!("myschema.myview", name.to_string());
@@ -8778,6 +8783,7 @@ fn parse_create_materialized_view_with_cluster_by() {
             name_before_not_exists: _,
             secure: _,
             copy_grants: _,
+            or_refresh: _,
         }) => {
             assert_eq!(or_alter, false);
             assert_eq!("myschema.myview", name.to_string());
@@ -17318,7 +17324,7 @@ fn parse_pipeline_operator_negative_tests() {
 
     // Test that CALL with invalid function syntax fails
     assert!(dialects
-        .parse_sql_statements("SELECT * FROM users |> CALL 123invalid")
+        .parse_sql_statements("SELECT * FROM users |> CALL 123 invalid")
         .is_err());
 
     // Test that CALL with malformed arguments fails

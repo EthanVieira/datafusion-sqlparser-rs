@@ -113,4 +113,96 @@ impl Dialect for DatabricksDialect {
     fn supports_select_item_multi_column_alias(&self) -> bool {
         true
     }
+
+    fn supports_typed_view_columns(&self) -> bool {
+        true
+    }
+
+    fn supports_create_view_comment_without_equals(&self) -> bool {
+        true
+    }
+
+    fn supports_create_view_comment_syntax(&self) -> bool {
+        true
+    }
+
+    fn supports_data_type_collation(&self) -> bool {
+        true
+    }
+
+    fn supports_map_literal_with_angle_brackets(&self) -> bool {
+        true
+    }
+
+    fn supports_string_literal_backslash_escape(&self) -> bool {
+        true
+    }
+
+    fn supports_create_view_table_properties(&self) -> bool {
+        true
+    }
+
+    fn supports_create_or_refresh(&self) -> bool {
+        true
+    }
+
+    fn supports_streaming_tables(&self) -> bool {
+        true
+    }
+
+    fn supports_watermark_clause(&self) -> bool {
+        true
+    }
+
+    fn supports_multipart_table_query_name(&self) -> bool {
+        true
+    }
+
+    fn supports_create_table_cluster_by(&self) -> bool {
+        true
+    }
+
+    fn supports_create_table_using(&self) -> bool {
+        true
+    }
+
+    fn supports_options_without_equals(&self) -> bool {
+        true
+    }
+
+    fn supports_create_table_distribution_after_format(&self) -> bool {
+        true
+    }
+
+    fn supports_create_table_comment_after_format(&self) -> bool {
+        true
+    }
+
+    fn supports_create_table_clone_version(&self) -> bool {
+        true
+    }
+
+    fn supports_create_view_schema_mode(&self) -> bool {
+        true
+    }
+
+    fn supports_databricks_create_objects(&self) -> bool {
+        true
+    }
+
+    fn supports_databricks_create_routines(&self) -> bool {
+        true
+    }
+
+    fn supports_select_wildcard_replace(&self) -> bool {
+        true
+    }
+
+    fn supports_from_first_select(&self) -> bool {
+        true
+    }
+
+    fn supports_pipe_operator(&self) -> bool {
+        true
+    }
 }

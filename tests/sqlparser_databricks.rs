@@ -737,3 +737,99 @@ fn parse_cte_without_as() {
         .parse_sql_statements("WITH cte (SELECT 1) SELECT * FROM cte")
         .is_err());
 }
+
+#[test]
+fn parse_materialized_view_typed_columns() {
+    databricks().one_statement_parses_to(
+        "CREATE MATERIALIZED VIEW v (id BIGINT COMMENT 'identifier', payload MAP<STRING COLLATE UTF8_BINARY, STRING COLLATE UTF8_BINARY>) COMMENT 'view comment' TBLPROPERTIES ('delta.feature.variantType-preview' = 'supported') AS SELECT 1, map()",
+        "CREATE MATERIALIZED VIEW v (id BIGINT COMMENT 'identifier', payload MAP<STRING COLLATE UTF8_BINARY, STRING COLLATE UTF8_BINARY>) COMMENT = 'view comment' TBLPROPERTIES ('delta.feature.variantType-preview' = 'supported') AS SELECT 1, map()",
+    );
+    databricks()
+        .parse_sql_statements(
+            r#"CREATE MATERIALIZED VIEW v (id STRING COMMENT 'value is \'1\'') AS SELECT '1'"#,
+        )
+        .unwrap();
+}
+
+#[test]
+fn parse_databricks_refreshable_datasets() {
+    databricks().verified_stmt(
+        "CREATE OR REFRESH MATERIALIZED VIEW main.models.rollup AS SELECT id FROM main.raw.source",
+    );
+    databricks().verified_stmt(
+        "CREATE OR REFRESH STREAMING TABLE main.models.events CLUSTER BY (event_id) AS SELECT event_id FROM STREAM(main.raw.events)",
+    );
+    databricks().verified_stmt(
+        "CREATE OR REFRESH STREAMING TABLE main.models.events AS SELECT event_id FROM STREAM(main.raw.events) WATERMARK event_time DELAY OF INTERVAL 10 MINUTES",
+    );
+}
+
+#[test]
+fn parse_databricks_query_entry_points() {
+    databricks().verified_stmt(
+        "CREATE VIEW cross_product AS FROM main.raw.left_table, main.raw.right_table",
+    );
+    databricks()
+        .verified_stmt("CREATE VIEW filtered AS FROM main.raw.source |> WHERE id > 0 |> SELECT id");
+    databricks().verified_stmt("CREATE VIEW copy AS TABLE main.raw.source");
+}
+
+#[test]
+fn parse_databricks_create_table_extensions() {
+    for sql in [
+        "CREATE TABLE t (event_date DATE) USING DELTA PARTITIONED BY (event_date)",
+        "CREATE TABLE t USING PARQUET OPTIONS (path 's3://bucket/t')",
+        "CREATE TABLE t SHALLOW CLONE source_table",
+        "CREATE TABLE t DEEP CLONE source_table",
+        "CREATE TABLE t CLONE source_table VERSION AS OF 7",
+        "CREATE TABLE t CLONE source_table TIMESTAMP AS OF '2024-01-01'",
+        "CREATE TABLE t USING DELTA COMMENT 'a table' TBLPROPERTIES ('quality' = 'gold') AS SELECT 1 AS id",
+        "CREATE VIEW t AS SELECT * REPLACE (upper(name) AS name) FROM source",
+        "CREATE VIEW t WITH SCHEMA BINDING AS SELECT id FROM source",
+        "CREATE VIEW t WITH SCHEMA COMPENSATION AS SELECT id FROM source",
+        "CREATE VIEW t WITH SCHEMA EVOLUTION AS SELECT id FROM source",
+    ] {
+        databricks().parse_sql_statements(sql).unwrap_or_else(|error| {
+            panic!("failed to parse {sql:?}: {error}");
+        });
+    }
+}
+
+#[test]
+fn parse_databricks_governance_and_flow_objects() {
+    let cases = [
+        ("CREATE FLOW f AS INSERT INTO target BY NAME SELECT * FROM STREAM(source)", DatabricksObjectKind::Flow, "f"),
+        ("CREATE CATALOG IF NOT EXISTS analytics COMMENT 'analytics catalog'", DatabricksObjectKind::Catalog, "analytics"),
+        ("CREATE SCHEMA analytics.reporting LOCATION 's3://bucket/reporting'", DatabricksObjectKind::Schema, "analytics.reporting"),
+        ("CREATE EXTERNAL VOLUME analytics.reporting.files LOCATION 's3://bucket/files'", DatabricksObjectKind::ExternalVolume, "analytics.reporting.files"),
+        ("CREATE STORAGE CREDENTIAL credential_name WITH AWS_IAM_ROLE (ROLE_ARN = 'arn:example')", DatabricksObjectKind::StorageCredential, "credential_name"),
+        ("CREATE EXTERNAL LOCATION location_name URL 's3://bucket/path' WITH (STORAGE CREDENTIAL credential_name)", DatabricksObjectKind::ExternalLocation, "location_name"),
+        ("CREATE FOREIGN CATALOG foreign_catalog USING CONNECTION connection_name OPTIONS (database 'db')", DatabricksObjectKind::ForeignCatalog, "foreign_catalog"),
+        ("CREATE RECIPIENT recipient_name", DatabricksObjectKind::Recipient, "recipient_name"),
+    ];
+
+    for (sql, expected_kind, expected_name) in cases {
+        let statement = databricks().parse_sql_statements(sql).unwrap().remove(0);
+        let Statement::CreateDatabricksObject(object) = statement else {
+            panic!("expected Databricks object for {sql:?}");
+        };
+        assert_eq!(object.kind, expected_kind);
+        assert_eq!(object.name.to_string(), expected_name);
+    }
+}
+
+#[test]
+fn parse_databricks_sql_routines() {
+    for sql in [
+        "CREATE FUNCTION add_one(x INT) RETURNS INT RETURN x + 1",
+        "CREATE OR REPLACE FUNCTION f() RETURNS STRING LANGUAGE SQL RETURN 'ok'",
+        "CREATE FUNCTION f(x INT) RETURNS TABLE(id INT) RETURN SELECT x AS id",
+        "CREATE FUNCTION f(x DOUBLE) RETURNS DOUBLE DETERMINISTIC CONTAINS SQL RETURN x * x",
+        "CREATE OR REPLACE FUNCTION f(x STRING) RETURNS STRING COMMENT 'normalizes input' RETURN trim(x)",
+        "CREATE PROCEDURE p() LANGUAGE SQL SQL SECURITY INVOKER AS BEGIN SELECT 1; END",
+    ] {
+        databricks().parse_sql_statements(sql).unwrap_or_else(|error| {
+            panic!("failed to parse {sql:?}: {error}");
+        });
+    }
+}

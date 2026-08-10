@@ -56,6 +56,97 @@ use crate::display_utils::{DisplayCommaSeparated, Indent, NewLine, SpaceOrNewlin
 use crate::keywords::Keyword;
 use crate::tokenizer::{Span, Token};
 
+/// A Databricks governance or Lakeflow object type.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum DatabricksObjectKind {
+    /// A Lakeflow flow.
+    Flow,
+    /// A Unity Catalog catalog.
+    Catalog,
+    /// A schema.
+    Schema,
+    /// A managed volume.
+    Volume,
+    /// An external volume.
+    ExternalVolume,
+    /// A storage credential.
+    StorageCredential,
+    /// An external location.
+    ExternalLocation,
+    /// A Lakehouse Federation connection.
+    Connection,
+    /// A foreign catalog.
+    ForeignCatalog,
+    /// A Delta Sharing share.
+    Share,
+    /// A Delta Sharing recipient.
+    Recipient,
+    /// A Delta Sharing provider.
+    Provider,
+}
+
+impl fmt::Display for DatabricksObjectKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            Self::Flow => "FLOW",
+            Self::Catalog => "CATALOG",
+            Self::Schema => "SCHEMA",
+            Self::Volume => "VOLUME",
+            Self::ExternalVolume => "EXTERNAL VOLUME",
+            Self::StorageCredential => "STORAGE CREDENTIAL",
+            Self::ExternalLocation => "EXTERNAL LOCATION",
+            Self::Connection => "CONNECTION",
+            Self::ForeignCatalog => "FOREIGN CATALOG",
+            Self::Share => "SHARE",
+            Self::Recipient => "RECIPIENT",
+            Self::Provider => "PROVIDER",
+        })
+    }
+}
+
+/// A Databricks governance or Lakeflow `CREATE` statement.
+///
+/// The object identity is structured while the rapidly evolving,
+/// object-specific clauses remain tokenized and lossless.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct CreateDatabricksObject {
+    /// `OR REPLACE` clause.
+    pub or_replace: bool,
+    /// Object type.
+    pub kind: DatabricksObjectKind,
+    /// `IF NOT EXISTS` clause.
+    pub if_not_exists: bool,
+    /// Object name.
+    pub name: ObjectName,
+    /// Tokenized object-specific clauses following the name.
+    pub clauses: Vec<Token>,
+}
+
+impl fmt::Display for CreateDatabricksObject {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "CREATE {}{} {}{}",
+            if self.or_replace { "OR REPLACE " } else { "" },
+            self.kind,
+            if self.if_not_exists {
+                "IF NOT EXISTS "
+            } else {
+                ""
+            },
+            self.name
+        )?;
+        for token in &self.clauses {
+            write!(f, " {token}")?;
+        }
+        Ok(())
+    }
+}
+
 /// Index column type.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -2915,6 +3006,8 @@ impl fmt::Display for CreateIndex {
 pub struct CreateTable {
     /// `OR REPLACE` clause
     pub or_replace: bool,
+    /// Databricks `OR REFRESH` clause
+    pub or_refresh: bool,
     /// `TEMP` or `TEMPORARY` clause
     pub temporary: bool,
     /// `UNLOGGED` clause
@@ -2923,6 +3016,8 @@ pub struct CreateTable {
     pub external: bool,
     /// `DYNAMIC` clause
     pub dynamic: bool,
+    /// Databricks `STREAMING` clause
+    pub streaming: bool,
     /// `GLOBAL` clause
     pub global: Option<bool>,
     /// `IF NOT EXISTS` clause
@@ -2955,6 +3050,8 @@ pub struct CreateTable {
     pub location: Option<String>,
     /// Query used to populate the table
     pub query: Option<Box<Query>>,
+    /// Databricks streaming table watermark clause
+    pub watermark: Option<Watermark>,
     /// If the table should be created without a rowid (SQLite)
     pub without_rowid: bool,
     /// `LIKE` clause
@@ -3110,8 +3207,9 @@ impl fmt::Display for CreateTable {
         //   `CREATE TABLE t (a INT) AS SELECT a from t2`
         write!(
             f,
-            "CREATE {or_replace}{external}{global}{multiset}{temporary}{unlogged}{transient}{volatile}{dynamic}{iceberg}{snapshot}TABLE {if_not_exists}{name}",
+            "CREATE {or_replace}{or_refresh}{external}{global}{multiset}{temporary}{unlogged}{transient}{volatile}{dynamic}{iceberg}{snapshot}{streaming}TABLE {if_not_exists}{name}",
             or_replace = if self.or_replace { "OR REPLACE " } else { "" },
+            or_refresh = if self.or_refresh { "OR REFRESH " } else { "" },
             external = if self.external { "EXTERNAL " } else { "" },
             snapshot = if self.snapshot { "SNAPSHOT " } else { "" },
             global = self.global
@@ -3134,6 +3232,7 @@ impl fmt::Display for CreateTable {
             volatile = if self.volatile { "VOLATILE " } else { "" },
             iceberg = if self.iceberg { "ICEBERG " } else { "" },
             dynamic = if self.dynamic { "DYNAMIC " } else { "" },
+            streaming = if self.streaming { "STREAMING " } else { "" },
             name = self.name,
         )?;
         if let Some(fallback) = self.fallback {
@@ -3426,10 +3525,30 @@ impl fmt::Display for CreateTable {
         if let Some(query) = &self.query {
             write!(f, " AS {query}")?;
         }
+        if let Some(watermark) = &self.watermark {
+            write!(f, " {watermark}")?;
+        }
         if let Some(with_data) = &self.with_data {
             write!(f, " {with_data}")?;
         }
         Ok(())
+    }
+}
+
+/// Databricks `WATERMARK event_time DELAY OF interval` clause.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct Watermark {
+    /// Event-time expression used by the watermark.
+    pub event_time: Expr,
+    /// Maximum delay accepted for the event-time expression.
+    pub delay: Expr,
+}
+
+impl fmt::Display for Watermark {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "WATERMARK {} DELAY OF {}", self.event_time, self.delay)
     }
 }
 
@@ -4380,6 +4499,8 @@ pub struct CreateView {
     pub or_alter: bool,
     /// The `OR REPLACE` clause is used to re-create the view if it already exists.
     pub or_replace: bool,
+    /// Databricks `OR REFRESH` clause for materialized views.
+    pub or_refresh: bool,
     /// if true, has MATERIALIZED view modifier
     pub materialized: bool,
     /// Snowflake: SECURE view modifier
@@ -4433,6 +4554,9 @@ impl fmt::Display for CreateView {
             or_alter = if self.or_alter { "OR ALTER " } else { "" },
             or_replace = if self.or_replace { "OR REPLACE " } else { "" },
         )?;
+        if self.or_refresh {
+            f.write_str("OR REFRESH ")?;
+        }
         if let Some(ref params) = self.params {
             params.fmt(f)?;
         }
@@ -4472,6 +4596,9 @@ impl fmt::Display for CreateView {
         }
         if let Some(ref comment) = self.comment {
             write!(f, " COMMENT = '{}'", escape_single_quote_string(comment))?;
+        }
+        if matches!(self.options, CreateTableOptions::TableProperties(_)) {
+            write!(f, " {}", self.options)?;
         }
         if !self.cluster_by.is_empty() {
             write!(
