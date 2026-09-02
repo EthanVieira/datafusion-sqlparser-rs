@@ -824,3 +824,53 @@ fn parse_databricks_create_table_extensions() {
         .parse_sql_statements("CREATE TABLE t SHALLOW")
         .is_err());
 }
+
+#[test]
+fn parse_databricks_create_schema() {
+    let statement = databricks().one_statement_parses_to(
+        "CREATE SCHEMA IF NOT EXISTS analytics.reporting COMMENT 'reporting' LOCATION 's3://bucket/reporting' WITH DBPROPERTIES (owner 'analytics')",
+        "CREATE SCHEMA IF NOT EXISTS analytics.reporting COMMENT 'reporting' LOCATION 's3://bucket/reporting' WITH DBPROPERTIES (owner = 'analytics')",
+    );
+    let Statement::CreateSchema {
+        comment,
+        location,
+        dbproperties,
+        ..
+    } = statement
+    else {
+        panic!("expected CREATE SCHEMA");
+    };
+    assert_eq!(comment.as_deref(), Some("reporting"));
+    assert_eq!(location.as_deref(), Some("s3://bucket/reporting"));
+    assert_eq!(dbproperties.unwrap().len(), 1);
+}
+
+#[test]
+fn parse_databricks_governance_and_flow_objects() {
+    let cases = [
+        ("CREATE FLOW f AS INSERT INTO target BY NAME SELECT * FROM STREAM(source)", "CREATE FLOW f AS INSERT INTO target BY NAME SELECT * FROM STREAM(source)", DatabricksObjectKind::Flow, "f"),
+        ("CREATE CATALOG IF NOT EXISTS analytics COMMENT 'analytics'' catalog'", "CREATE CATALOG IF NOT EXISTS analytics COMMENT 'analytics'' catalog'", DatabricksObjectKind::Catalog, "analytics"),
+        ("CREATE VOLUME analytics.reporting.files COMMENT 'managed files'", "CREATE VOLUME analytics.reporting.files COMMENT 'managed files'", DatabricksObjectKind::Volume, "analytics.reporting.files"),
+        ("CREATE EXTERNAL VOLUME analytics.reporting.files LOCATION 's3://bucket/files'", "CREATE EXTERNAL VOLUME analytics.reporting.files LOCATION 's3://bucket/files'", DatabricksObjectKind::ExternalVolume, "analytics.reporting.files"),
+        ("CREATE STORAGE CREDENTIAL credential_name WITH AWS_IAM_ROLE (ROLE_ARN = 'arn:example')", "CREATE STORAGE CREDENTIAL credential_name WITH AWS_IAM_ROLE(ROLE_ARN = 'arn:example')", DatabricksObjectKind::StorageCredential, "credential_name"),
+        ("CREATE EXTERNAL LOCATION location_name URL 's3://bucket/path' WITH (STORAGE CREDENTIAL credential_name)", "CREATE EXTERNAL LOCATION location_name URL 's3://bucket/path' WITH (STORAGE CREDENTIAL credential_name)", DatabricksObjectKind::ExternalLocation, "location_name"),
+        ("CREATE FOREIGN CATALOG foreign_catalog USING CONNECTION connection_name OPTIONS (database 'db')", "CREATE FOREIGN CATALOG foreign_catalog USING CONNECTION connection_name OPTIONS(database 'db')", DatabricksObjectKind::ForeignCatalog, "foreign_catalog"),
+        ("CREATE CONNECTION connection_name TYPE POSTGRESQL OPTIONS (host 'db.example.com')", "CREATE CONNECTION connection_name TYPE POSTGRESQL OPTIONS(host 'db.example.com')", DatabricksObjectKind::Connection, "connection_name"),
+        ("CREATE SHARE share_name COMMENT 'shared data'", "CREATE SHARE share_name COMMENT 'shared data'", DatabricksObjectKind::Share, "share_name"),
+        ("CREATE RECIPIENT recipient_name", "CREATE RECIPIENT recipient_name", DatabricksObjectKind::Recipient, "recipient_name"),
+        ("CREATE PROVIDER provider_name COMMENT 'provider'", "CREATE PROVIDER provider_name COMMENT 'provider'", DatabricksObjectKind::Provider, "provider_name"),
+    ];
+
+    for (sql, canonical, expected_kind, expected_name) in cases {
+        let statement = databricks().one_statement_parses_to(sql, canonical);
+        let Statement::CreateDatabricksObject(object) = statement else {
+            panic!("expected Databricks object for {sql:?}");
+        };
+        assert_eq!(object.kind, expected_kind);
+        assert_eq!(object.name.to_string(), expected_name);
+    }
+
+    assert!(databricks()
+        .parse_sql_statements("CREATE FLOW f SELECT 1")
+        .is_err());
+}

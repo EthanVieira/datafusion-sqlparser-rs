@@ -5303,6 +5303,10 @@ impl<'a> Parser<'a> {
             .map(Into::into)
         } else if self.parse_keyword(Keyword::POLICY) {
             self.parse_create_policy().map(Into::into)
+        } else if self.dialect.supports_databricks_create_objects()
+            && self.is_databricks_create_object()
+        {
+            self.parse_databricks_create_object(or_replace)
         } else if self.parse_keyword(Keyword::EXTERNAL) {
             self.parse_create_external_table(or_replace).map(Into::into)
         } else if self.parse_keyword(Keyword::FUNCTION) {
@@ -5366,6 +5370,88 @@ impl<'a> Parser<'a> {
         } else {
             self.expected_ref("an object type after CREATE", self.peek_token_ref())
         }
+    }
+
+    fn token_is_word(token: &Token, expected: &str) -> bool {
+        matches!(token, Token::Word(word) if word.value.eq_ignore_ascii_case(expected))
+    }
+
+    fn peek_word(&self, offset: usize, expected: &str) -> bool {
+        Self::token_is_word(&self.peek_nth_token_ref(offset).token, expected)
+    }
+
+    fn is_databricks_create_object(&self) -> bool {
+        self.peek_word(0, "FLOW")
+            || self.peek_word(0, "CATALOG")
+            || self.peek_word(0, "VOLUME")
+            || self.peek_word(0, "CONNECTION")
+            || self.peek_word(0, "SHARE")
+            || self.peek_word(0, "RECIPIENT")
+            || self.peek_word(0, "PROVIDER")
+            || (self.peek_word(0, "EXTERNAL")
+                && (self.peek_word(1, "VOLUME") || self.peek_word(1, "LOCATION")))
+            || (self.peek_word(0, "STORAGE") && self.peek_word(1, "CREDENTIAL"))
+            || (self.peek_word(0, "FOREIGN") && self.peek_word(1, "CATALOG"))
+    }
+
+    fn parse_databricks_create_object(
+        &mut self,
+        or_replace: bool,
+    ) -> Result<Statement, ParserError> {
+        let first = self.parse_identifier()?.value.to_ascii_uppercase();
+        let kind = match first.as_str() {
+            "FLOW" => DatabricksObjectKind::Flow,
+            "CATALOG" => DatabricksObjectKind::Catalog,
+            "VOLUME" => DatabricksObjectKind::Volume,
+            "CONNECTION" => DatabricksObjectKind::Connection,
+            "SHARE" => DatabricksObjectKind::Share,
+            "RECIPIENT" => DatabricksObjectKind::Recipient,
+            "PROVIDER" => DatabricksObjectKind::Provider,
+            "EXTERNAL" => match self.parse_identifier()?.value.to_ascii_uppercase().as_str() {
+                "VOLUME" => DatabricksObjectKind::ExternalVolume,
+                "LOCATION" => DatabricksObjectKind::ExternalLocation,
+                _ => {
+                    return self
+                        .expected_ref("VOLUME or LOCATION after EXTERNAL", self.peek_token_ref())
+                }
+            },
+            "STORAGE" => {
+                let credential = self.parse_identifier()?;
+                debug_assert!(credential.value.eq_ignore_ascii_case("CREDENTIAL"));
+                DatabricksObjectKind::StorageCredential
+            }
+            "FOREIGN" => {
+                let catalog = self.parse_identifier()?;
+                debug_assert!(catalog.value.eq_ignore_ascii_case("CATALOG"));
+                DatabricksObjectKind::ForeignCatalog
+            }
+            _ => {
+                return self.expected_ref(
+                    "a Databricks governance or Lakeflow object type",
+                    self.peek_token_ref(),
+                )
+            }
+        };
+        let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+        let name = self.parse_object_name(false)?;
+        let mut clauses = Vec::new();
+        while !matches!(self.peek_token_ref().token, Token::SemiColon | Token::EOF) {
+            clauses.push(self.next_token().token);
+        }
+        if kind == DatabricksObjectKind::Flow
+            && !clauses
+                .first()
+                .is_some_and(|token| Self::token_is_word(token, "AS"))
+        {
+            return self.expected_ref("AS after CREATE FLOW name", self.peek_token_ref());
+        }
+        Ok(Statement::CreateDatabricksObject(CreateDatabricksObject {
+            or_replace,
+            kind,
+            if_not_exists,
+            name,
+            clauses,
+        }))
     }
 
     fn parse_text_search_object_type(&mut self) -> Result<TextSearchObjectType, ParserError> {
@@ -5696,6 +5782,30 @@ impl<'a> Parser<'a> {
             None
         };
 
+        let comment = if self.dialect.supports_databricks_create_objects()
+            && self.parse_keyword(Keyword::COMMENT)
+        {
+            Some(self.parse_comment_value()?)
+        } else {
+            None
+        };
+
+        let location = if self.dialect.supports_databricks_create_objects()
+            && self.parse_keyword(Keyword::LOCATION)
+        {
+            Some(self.parse_literal_string()?)
+        } else {
+            None
+        };
+
+        let dbproperties = if self.dialect.supports_databricks_create_objects()
+            && self.peek_keywords(&[Keyword::WITH, Keyword::DBPROPERTIES])
+        {
+            Some(self.parse_options_with_keywords(&[Keyword::WITH, Keyword::DBPROPERTIES])?)
+        } else {
+            None
+        };
+
         Ok(Statement::CreateSchema {
             schema_name,
             or_replace,
@@ -5703,6 +5813,9 @@ impl<'a> Parser<'a> {
             with,
             options,
             default_collate_spec,
+            comment,
+            location,
+            dbproperties,
             clone,
         })
     }

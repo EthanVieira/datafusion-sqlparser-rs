@@ -56,6 +56,130 @@ use crate::display_utils::{DisplayCommaSeparated, Indent, NewLine, SpaceOrNewlin
 use crate::keywords::Keyword;
 use crate::tokenizer::{Span, Token};
 
+/// A Databricks governance or Lakeflow object type.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum DatabricksObjectKind {
+    /// A Lakeflow flow.
+    Flow,
+    /// A Unity Catalog catalog.
+    Catalog,
+    /// A managed volume.
+    Volume,
+    /// An external volume.
+    ExternalVolume,
+    /// A storage credential.
+    StorageCredential,
+    /// An external location.
+    ExternalLocation,
+    /// A Lakehouse Federation connection.
+    Connection,
+    /// A foreign catalog.
+    ForeignCatalog,
+    /// A Delta Sharing share.
+    Share,
+    /// A Delta Sharing recipient.
+    Recipient,
+    /// A Delta Sharing provider.
+    Provider,
+}
+
+impl fmt::Display for DatabricksObjectKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            Self::Flow => "FLOW",
+            Self::Catalog => "CATALOG",
+            Self::Volume => "VOLUME",
+            Self::ExternalVolume => "EXTERNAL VOLUME",
+            Self::StorageCredential => "STORAGE CREDENTIAL",
+            Self::ExternalLocation => "EXTERNAL LOCATION",
+            Self::Connection => "CONNECTION",
+            Self::ForeignCatalog => "FOREIGN CATALOG",
+            Self::Share => "SHARE",
+            Self::Recipient => "RECIPIENT",
+            Self::Provider => "PROVIDER",
+        })
+    }
+}
+
+/// A Databricks governance or Lakeflow `CREATE` statement.
+///
+/// The object identity is structured while the rapidly evolving,
+/// object-specific clauses remain tokenized and lossless.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct CreateDatabricksObject {
+    /// `OR REPLACE` clause.
+    pub or_replace: bool,
+    /// Object type.
+    pub kind: DatabricksObjectKind,
+    /// `IF NOT EXISTS` clause.
+    pub if_not_exists: bool,
+    /// Object name.
+    pub name: ObjectName,
+    /// Tokenized object-specific clauses following the name.
+    pub clauses: Vec<Token>,
+}
+
+impl fmt::Display for CreateDatabricksObject {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "CREATE {}{} {}{}",
+            if self.or_replace { "OR REPLACE " } else { "" },
+            self.kind,
+            if self.if_not_exists {
+                "IF NOT EXISTS "
+            } else {
+                ""
+            },
+            self.name
+        )?;
+        let mut previous: Option<&Token> = None;
+        for token in &self.clauses {
+            let no_space_before = matches!(
+                token,
+                Token::Comma
+                    | Token::RParen
+                    | Token::RBracket
+                    | Token::RBrace
+                    | Token::Period
+                    | Token::Colon
+                    | Token::DoubleColon
+                    | Token::SemiColon
+            );
+            let no_space_after_previous = matches!(
+                previous,
+                Some(
+                    Token::LParen
+                        | Token::LBracket
+                        | Token::LBrace
+                        | Token::Period
+                        | Token::Colon
+                        | Token::DoubleColon
+                )
+            );
+            let function_call = matches!(token, Token::LParen)
+                && matches!(previous, Some(Token::Word(word)) if word.keyword != Keyword::WITH);
+            if previous.is_none()
+                || (!no_space_before && !no_space_after_previous && !function_call)
+            {
+                f.write_str(" ")?;
+            }
+            match token {
+                Token::SingleQuotedString(value) => {
+                    write!(f, "'{}'", escape_single_quote_string(value))?;
+                }
+                _ => write!(f, "{token}")?,
+            }
+            previous = Some(token);
+        }
+        Ok(())
+    }
+}
+
 /// Databricks table clone depth.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

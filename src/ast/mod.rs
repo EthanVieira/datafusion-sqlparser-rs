@@ -44,6 +44,7 @@ use core::ops::ControlFlow;
 #[cfg(feature = "visitor")]
 use sqlparser_derive::{Visit, VisitMut};
 
+use self::value::escape_single_quote_string;
 use crate::{
     display_utils::SpaceOrNewline,
     tokenizer::{Span, Token},
@@ -72,11 +73,12 @@ pub use self::ddl::{
     AlterTypeOperation, AlterTypeRename, AlterTypeRenameValue, ClusteredBy, ColumnDef,
     ColumnOption, ColumnOptionDef, ColumnOptions, ColumnPolicy, ColumnPolicyProperty,
     ConstraintCharacteristics, CreateCollation, CreateCollationDefinition, CreateConnector,
-    CreateDomain, CreateExtension, CreateFunction, CreateIndex, CreateOperator,
-    CreateOperatorClass, CreateOperatorFamily, CreatePolicy, CreatePolicyCommand, CreatePolicyType,
-    CreateTable, CreateTableCloneKind, CreateTextSearch, CreateTrigger, CreateView, Deduplicate,
-    DeferrableInitial, DistStyle, DropBehavior, DropExtension, DropFunction, DropOperator,
-    DropOperatorClass, DropOperatorFamily, DropOperatorSignature, DropPolicy, DropTrigger, ForValues,
+    CreateDatabricksObject, CreateDomain, CreateExtension, CreateFunction, CreateIndex,
+    CreateOperator, CreateOperatorClass, CreateOperatorFamily, CreatePolicy, CreatePolicyCommand,
+    CreatePolicyType, CreateTable, CreateTableCloneKind, CreateTextSearch, CreateTrigger,
+    CreateView, DatabricksObjectKind, Deduplicate, DeferrableInitial, DistStyle, DropBehavior,
+    DropExtension, DropFunction, DropOperator, DropOperatorClass, DropOperatorFamily,
+    DropOperatorSignature, DropPolicy, DropTrigger, ForValues,
     FunctionReturnType, GeneratedAs, GeneratedExpressionMode, IdentityParameters, IdentityProperty,
     IdentityPropertyFormatKind, IdentityPropertyKind, IdentityPropertyOrder, IndexColumn,
     IndexOption, IndexType, KeyOrIndexDisplay, Msck, NullsDistinctOption, OperatorArgTypes,
@@ -4407,6 +4409,12 @@ pub enum Statement {
         ///
         /// [BigQuery](https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_schema_statement)
         default_collate_spec: Option<Expr>,
+        /// Databricks schema comment.
+        comment: Option<String>,
+        /// Databricks managed storage location.
+        location: Option<String>,
+        /// Databricks schema properties.
+        dbproperties: Option<Vec<SqlOption>>,
         /// Clones a schema
         ///
         /// ```sql
@@ -4477,6 +4485,8 @@ pub enum Statement {
     /// 3. [BigQuery](https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_function_statement)
     /// 4. [MsSql](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-function-transact-sql)
     CreateFunction(CreateFunction),
+    /// A Databricks governance or Lakeflow object definition.
+    CreateDatabricksObject(CreateDatabricksObject),
     /// CREATE TRIGGER statement. See struct [CreateTrigger] for details.
     CreateTrigger(CreateTrigger),
     /// DROP TRIGGER statement. See struct [DropTrigger] for details.
@@ -5481,6 +5491,7 @@ impl fmt::Display for Statement {
                 Ok(())
             }
             Statement::CreateFunction(create_function) => create_function.fmt(f),
+            Statement::CreateDatabricksObject(create_object) => create_object.fmt(f),
             Statement::CreateDomain(create_domain) => create_domain.fmt(f),
             Statement::CreateTrigger(create_trigger) => create_trigger.fmt(f),
             Statement::DropTrigger(drop_trigger) => drop_trigger.fmt(f),
@@ -6056,6 +6067,9 @@ impl fmt::Display for Statement {
                 with,
                 options,
                 default_collate_spec,
+                comment,
+                location,
+                dbproperties,
                 clone,
             } => {
                 write!(
@@ -6080,6 +6094,19 @@ impl fmt::Display for Statement {
 
                 if let Some(clone) = clone {
                     write!(f, " CLONE {clone}")?;
+                }
+                if let Some(comment) = comment {
+                    write!(f, " COMMENT '{}'", escape_single_quote_string(comment))?;
+                }
+                if let Some(location) = location {
+                    write!(f, " LOCATION '{}'", escape_single_quote_string(location))?;
+                }
+                if let Some(dbproperties) = dbproperties {
+                    write!(
+                        f,
+                        " WITH DBPROPERTIES ({})",
+                        display_comma_separated(dbproperties)
+                    )?;
                 }
                 Ok(())
             }

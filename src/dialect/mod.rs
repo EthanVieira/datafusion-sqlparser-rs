@@ -1149,6 +1149,12 @@ pub trait Dialect: Debug + Any {
         false
     }
 
+    /// Returns true if this dialect supports Databricks governance and
+    /// Lakeflow object definitions such as `CREATE CATALOG` and `CREATE FLOW`.
+    fn supports_databricks_create_objects(&self) -> bool {
+        false
+    }
+
     /// Returns true if a data type can carry a collation, including inside a
     /// nested type such as `MAP<STRING COLLATE UTF8_BINARY, STRING>`.
     fn supports_data_type_collation(&self) -> bool {
