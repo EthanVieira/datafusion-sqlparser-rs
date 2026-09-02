@@ -2938,6 +2938,8 @@ impl fmt::Display for CreateIndex {
 pub struct CreateTable {
     /// `OR REPLACE` clause
     pub or_replace: bool,
+    /// Databricks `OR REFRESH` clause
+    pub or_refresh: bool,
     /// `TEMP` or `TEMPORARY` clause
     pub temporary: bool,
     /// `UNLOGGED` clause
@@ -2946,6 +2948,8 @@ pub struct CreateTable {
     pub external: bool,
     /// `DYNAMIC` clause
     pub dynamic: bool,
+    /// Databricks `STREAMING` clause
+    pub streaming: bool,
     /// `GLOBAL` clause
     pub global: Option<bool>,
     /// `IF NOT EXISTS` clause
@@ -2978,6 +2982,8 @@ pub struct CreateTable {
     pub location: Option<String>,
     /// Query used to populate the table
     pub query: Option<Box<Query>>,
+    /// Databricks streaming table watermark clause
+    pub watermark: Option<Watermark>,
     /// If the table should be created without a rowid (SQLite)
     pub without_rowid: bool,
     /// `LIKE` clause
@@ -3133,8 +3139,9 @@ impl fmt::Display for CreateTable {
         //   `CREATE TABLE t (a INT) AS SELECT a from t2`
         write!(
             f,
-            "CREATE {or_replace}{external}{global}{multiset}{temporary}{unlogged}{transient}{volatile}{dynamic}{iceberg}{snapshot}TABLE {if_not_exists}{name}",
+            "CREATE {or_replace}{or_refresh}{external}{global}{multiset}{temporary}{unlogged}{transient}{volatile}{dynamic}{iceberg}{snapshot}{streaming}TABLE {if_not_exists}{name}",
             or_replace = if self.or_replace { "OR REPLACE " } else { "" },
+            or_refresh = if self.or_refresh { "OR REFRESH " } else { "" },
             external = if self.external { "EXTERNAL " } else { "" },
             snapshot = if self.snapshot { "SNAPSHOT " } else { "" },
             global = self.global
@@ -3157,6 +3164,7 @@ impl fmt::Display for CreateTable {
             volatile = if self.volatile { "VOLATILE " } else { "" },
             iceberg = if self.iceberg { "ICEBERG " } else { "" },
             dynamic = if self.dynamic { "DYNAMIC " } else { "" },
+            streaming = if self.streaming { "STREAMING " } else { "" },
             name = self.name,
         )?;
         if let Some(fallback) = self.fallback {
@@ -3449,10 +3457,30 @@ impl fmt::Display for CreateTable {
         if let Some(query) = &self.query {
             write!(f, " AS {query}")?;
         }
+        if let Some(watermark) = &self.watermark {
+            write!(f, " {watermark}")?;
+        }
         if let Some(with_data) = &self.with_data {
             write!(f, " {with_data}")?;
         }
         Ok(())
+    }
+}
+
+/// Databricks `WATERMARK event_time DELAY OF interval` clause.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct Watermark {
+    /// Event-time expression used by the watermark.
+    pub event_time: Expr,
+    /// Maximum delay accepted for the event-time expression.
+    pub delay: Expr,
+}
+
+impl fmt::Display for Watermark {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "WATERMARK {} DELAY OF {}", self.event_time, self.delay)
     }
 }
 

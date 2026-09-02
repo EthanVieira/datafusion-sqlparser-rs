@@ -791,3 +791,10 @@ fn parse_databricks_refreshable_views() {
         .parse_sql_statements("CREATE OR REFRESH VIEW t AS SELECT 1")
         .is_err());
 }
+
+#[test]
+fn parse_databricks_streaming_tables() {
+    databricks().verified_stmt(
+        "CREATE OR REFRESH STREAMING TABLE main.models.events AS SELECT event_id FROM STREAM(main.raw.events) WATERMARK event_time DELAY OF INTERVAL 10 MINUTES",
+    );
+}

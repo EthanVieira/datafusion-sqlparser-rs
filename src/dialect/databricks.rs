@@ -146,6 +146,14 @@ impl Dialect for DatabricksDialect {
         true
     }
 
+    fn supports_streaming_tables(&self) -> bool {
+        true
+    }
+
+    fn supports_watermark_clause(&self) -> bool {
+        true
+    }
+
     fn supports_multipart_table_query_name(&self) -> bool {
         true
     }

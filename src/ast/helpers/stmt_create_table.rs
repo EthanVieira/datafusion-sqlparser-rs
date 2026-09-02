@@ -29,7 +29,7 @@ use crate::ast::{
     DistStyle, Expr, FileFormat, ForValues, HiveDistributionStyle, HiveFormat, Ident,
     InitializeKind, ObjectName, OnCommit, OneOrManyWithParens, Query, RefreshModeKind,
     RowAccessPolicy, Statement, StorageLifecyclePolicy, StorageSerializationPolicy,
-    TableConstraint, TableVersion, Tag, WithData, WrappedCollection,
+    TableConstraint, TableVersion, Tag, Watermark, WithData, WrappedCollection,
 };
 
 use crate::parser::ParserError;
@@ -67,6 +67,8 @@ use crate::parser::ParserError;
 pub struct CreateTableBuilder {
     /// Whether the statement uses `OR REPLACE`.
     pub or_replace: bool,
+    /// Whether the statement uses Databricks `OR REFRESH`.
+    pub or_refresh: bool,
     /// Whether the table is `TEMPORARY`.
     pub temporary: bool,
     /// Whether the table is `UNLOGGED`.
@@ -87,6 +89,8 @@ pub struct CreateTableBuilder {
     pub snapshot: bool,
     /// Whether `DYNAMIC` table option is set.
     pub dynamic: bool,
+    /// Whether the table is a Databricks streaming table.
+    pub streaming: bool,
     /// The table name.
     pub name: ObjectName,
     /// Column definitions for the table.
@@ -103,6 +107,8 @@ pub struct CreateTableBuilder {
     pub location: Option<String>,
     /// Optional `AS SELECT` query for the table.
     pub query: Option<Box<Query>>,
+    /// Optional Databricks watermark clause.
+    pub watermark: Option<Watermark>,
     /// Whether `WITHOUT ROWID` is set.
     pub without_rowid: bool,
     /// Optional `LIKE` clause kind.
@@ -201,6 +207,7 @@ impl CreateTableBuilder {
     pub fn new(name: ObjectName) -> Self {
         Self {
             or_replace: false,
+            or_refresh: false,
             temporary: false,
             unlogged: false,
             external: false,
@@ -211,6 +218,7 @@ impl CreateTableBuilder {
             iceberg: false,
             snapshot: false,
             dynamic: false,
+            streaming: false,
             name,
             columns: vec![],
             constraints: vec![],
@@ -218,6 +226,7 @@ impl CreateTableBuilder {
             hive_formats: None,
             file_format: None,
             location: None,
+            watermark: None,
             query: None,
             without_rowid: false,
             like: None,
@@ -269,6 +278,21 @@ impl CreateTableBuilder {
     /// Set `OR REPLACE` for the CREATE TABLE statement.
     pub fn or_replace(mut self, or_replace: bool) -> Self {
         self.or_replace = or_replace;
+        self
+    }
+    /// Set Databricks `OR REFRESH` for the CREATE TABLE statement.
+    pub fn or_refresh(mut self, or_refresh: bool) -> Self {
+        self.or_refresh = or_refresh;
+        self
+    }
+    /// Mark the table as a Databricks streaming table.
+    pub fn streaming(mut self, streaming: bool) -> Self {
+        self.streaming = streaming;
+        self
+    }
+    /// Set the Databricks watermark clause.
+    pub fn watermark(mut self, watermark: Option<Watermark>) -> Self {
+        self.watermark = watermark;
         self
     }
     /// Mark the table as `TEMPORARY`.
@@ -602,6 +626,7 @@ impl CreateTableBuilder {
     pub fn build(self) -> CreateTable {
         CreateTable {
             or_replace: self.or_replace,
+            or_refresh: self.or_refresh,
             temporary: self.temporary,
             unlogged: self.unlogged,
             external: self.external,
@@ -612,6 +637,7 @@ impl CreateTableBuilder {
             iceberg: self.iceberg,
             snapshot: self.snapshot,
             dynamic: self.dynamic,
+            streaming: self.streaming,
             name: self.name,
             columns: self.columns,
             constraints: self.constraints,
@@ -620,6 +646,7 @@ impl CreateTableBuilder {
             file_format: self.file_format,
             location: self.location,
             query: self.query,
+            watermark: self.watermark,
             without_rowid: self.without_rowid,
             like: self.like,
             clone: self.clone,
@@ -688,6 +715,7 @@ impl From<CreateTable> for CreateTableBuilder {
     fn from(table: CreateTable) -> Self {
         Self {
             or_replace: table.or_replace,
+            or_refresh: table.or_refresh,
             temporary: table.temporary,
             unlogged: table.unlogged,
             external: table.external,
@@ -698,6 +726,7 @@ impl From<CreateTable> for CreateTableBuilder {
             iceberg: table.iceberg,
             snapshot: table.snapshot,
             dynamic: table.dynamic,
+            streaming: table.streaming,
             name: table.name,
             columns: table.columns,
             constraints: table.constraints,
@@ -706,6 +735,7 @@ impl From<CreateTable> for CreateTableBuilder {
             file_format: table.file_format,
             location: table.location,
             query: table.query,
+            watermark: table.watermark,
             without_rowid: table.without_rowid,
             like: table.like,
             clone: table.clone,

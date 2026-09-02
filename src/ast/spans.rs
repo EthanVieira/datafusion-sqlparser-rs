@@ -551,11 +551,13 @@ impl Spanned for CreateTable {
     fn span(&self) -> Span {
         let CreateTable {
             or_replace: _,    // bool
+            or_refresh: _,    // bool
             temporary: _,     // bool
             unlogged: _,      // bool
             external: _,      // bool
             global: _,        // bool
             dynamic: _,       // bool
+            streaming: _,     // bool
             if_not_exists: _, // bool
             transient: _,     // bool
             volatile: _,      // bool
@@ -569,6 +571,7 @@ impl Spanned for CreateTable {
             file_format: _,       // enum
             location: _,          // string, no span
             query,
+            watermark: _,
             without_rowid: _, // bool
             like: _,
             clone,
