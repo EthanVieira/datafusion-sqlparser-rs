@@ -8821,15 +8821,39 @@ impl<'a> Parser<'a> {
 
         let like = self.maybe_parse_create_table_like(allow_unquoted_hyphen)?;
 
-        let clone = if self.parse_keyword(Keyword::CLONE) {
-            self.parse_object_name(allow_unquoted_hyphen).ok()
+        let clone_kind = if self.dialect.supports_create_table_clone_version() {
+            match self.parse_one_of_keywords(&[Keyword::SHALLOW, Keyword::DEEP]) {
+                Some(Keyword::SHALLOW) => Some(CreateTableCloneKind::Shallow),
+                Some(Keyword::DEEP) => Some(CreateTableCloneKind::Deep),
+                Some(unexpected_keyword) => {
+                    let message = format!(
+                        "Internal parser error: expected SHALLOW or DEEP, got {unexpected_keyword:?}"
+                    );
+                    return Err(ParserError::ParserError(message));
+                }
+                None => None,
+            }
+        } else {
+            None
+        };
+        let clone = if clone_kind.is_some() {
+            self.expect_keyword_is(Keyword::CLONE)?;
+            Some(self.parse_object_name(allow_unquoted_hyphen)?)
+        } else if self.parse_keyword(Keyword::CLONE) {
+            Some(self.parse_object_name(allow_unquoted_hyphen)?)
+        } else {
+            None
+        };
+
+        let version = if clone.is_some() && self.dialect.supports_create_table_clone_version() {
+            self.maybe_parse_table_version()?
         } else {
             None
         };
 
         // parse optional column list (schema)
         let (columns, constraints) = self.parse_columns()?;
-        let comment_after_column_def =
+        let mut comment_after_column_def =
             if dialect_of!(self is HiveDialect) && self.parse_keyword(Keyword::COMMENT) {
                 let next_token = self.next_token();
                 match next_token.token {
@@ -8857,9 +8881,30 @@ impl<'a> Parser<'a> {
         // SQLite supports `WITHOUT ROWID` at the end of `CREATE TABLE`
         let without_rowid = self.parse_keywords(&[Keyword::WITHOUT, Keyword::ROWID]);
 
-        let hive_distribution = self.parse_hive_distribution()?;
+        let mut hive_distribution = self.parse_hive_distribution()?;
         let clustered_by = self.parse_optional_clustered_by()?;
         let hive_formats = self.parse_hive_formats()?;
+
+        let mut hive_distribution_after_hive_formats = false;
+        if matches!(hive_distribution, HiveDistributionStyle::NONE)
+            && self
+                .dialect
+                .supports_create_table_distribution_after_format()
+        {
+            hive_distribution = self.parse_hive_distribution()?;
+            hive_distribution_after_hive_formats =
+                !matches!(hive_distribution, HiveDistributionStyle::NONE);
+        }
+
+        let mut comment_after_hive_formats = false;
+        if comment_after_column_def.is_none()
+            && self.dialect.supports_create_table_comment_after_format()
+            && hive_formats.is_some()
+            && self.parse_keyword(Keyword::COMMENT)
+        {
+            comment_after_column_def = Some(CommentDef::WithoutEq(self.parse_comment_value()?));
+            comment_after_hive_formats = true;
+        }
 
         let create_table_config = self.parse_optional_create_table_config()?;
 
@@ -8991,7 +9036,11 @@ impl<'a> Parser<'a> {
             .without_rowid(without_rowid)
             .like(like)
             .clone_clause(clone)
+            .clone_kind(clone_kind)
+            .version(version)
             .comment_after_column_def(comment_after_column_def)
+            .comment_after_hive_formats(comment_after_hive_formats)
+            .hive_distribution_after_hive_formats(hive_distribution_after_hive_formats)
             .order_by(order_by)
             .on_commit(on_commit)
             .on_cluster(on_cluster)
@@ -9204,7 +9253,9 @@ impl<'a> Parser<'a> {
         };
 
         let mut cluster_by = None;
-        if dialect_of!(self is BigQueryDialect | GenericDialect) {
+        if dialect_of!(self is BigQueryDialect | GenericDialect)
+            || self.dialect.supports_create_table_cluster_by()
+        {
             if self.parse_keywords(&[Keyword::CLUSTER, Keyword::BY]) {
                 cluster_by = Some(WrappedCollection::NoWrapping(
                     self.parse_comma_separated(|p| p.parse_expr())?,
@@ -10612,7 +10663,11 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let name = self.parse_identifier()?;
-                self.expect_token(&Token::Eq)?;
+                if !self.consume_token(&Token::Eq)
+                    && !self.dialect.supports_options_without_equals()
+                {
+                    return self.expected_ref("=", self.peek_token_ref());
+                }
                 let value = self.parse_expr()?;
 
                 Ok(SqlOption::KeyValue { key: name, value })

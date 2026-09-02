@@ -795,6 +795,32 @@ fn parse_databricks_refreshable_views() {
 #[test]
 fn parse_databricks_streaming_tables() {
     databricks().verified_stmt(
+        "CREATE OR REFRESH STREAMING TABLE main.models.events CLUSTER BY (event_id) AS SELECT event_id FROM STREAM(main.raw.events)",
+    );
+    databricks().verified_stmt(
         "CREATE OR REFRESH STREAMING TABLE main.models.events AS SELECT event_id FROM STREAM(main.raw.events) WATERMARK event_time DELAY OF INTERVAL 10 MINUTES",
     );
+}
+
+#[test]
+fn parse_databricks_create_table_extensions() {
+    for sql in [
+        "CREATE TABLE t (event_date DATE) USING DELTA PARTITIONED BY (event_date)",
+        "CREATE TABLE t SHALLOW CLONE source_table",
+        "CREATE TABLE t DEEP CLONE source_table",
+        "CREATE TABLE t CLONE source_table VERSION AS OF 7",
+        "CREATE TABLE t CLONE source_table TIMESTAMP AS OF '2024-01-01'",
+        "CREATE TABLE t USING DELTA COMMENT 'a table' TBLPROPERTIES ('quality' = 'gold') AS SELECT 1 AS id",
+    ] {
+        databricks().verified_stmt(sql);
+    }
+
+    databricks().one_statement_parses_to(
+        "CREATE TABLE t USING PARQUET OPTIONS (path 's3://bucket/t')",
+        "CREATE TABLE t () USING PARQUET OPTIONS(path = 's3://bucket/t')",
+    );
+
+    assert!(databricks()
+        .parse_sql_statements("CREATE TABLE t SHALLOW")
+        .is_err());
 }

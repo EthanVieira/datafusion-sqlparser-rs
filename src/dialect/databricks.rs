@@ -158,6 +158,30 @@ impl Dialect for DatabricksDialect {
         true
     }
 
+    fn supports_create_table_cluster_by(&self) -> bool {
+        true
+    }
+
+    fn supports_create_table_using(&self) -> bool {
+        true
+    }
+
+    fn supports_options_without_equals(&self) -> bool {
+        true
+    }
+
+    fn supports_create_table_distribution_after_format(&self) -> bool {
+        true
+    }
+
+    fn supports_create_table_comment_after_format(&self) -> bool {
+        true
+    }
+
+    fn supports_create_table_clone_version(&self) -> bool {
+        true
+    }
+
     fn supports_create_view_schema_mode(&self) -> bool {
         true
     }

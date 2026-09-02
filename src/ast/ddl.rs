@@ -56,6 +56,26 @@ use crate::display_utils::{DisplayCommaSeparated, Indent, NewLine, SpaceOrNewlin
 use crate::keywords::Keyword;
 use crate::tokenizer::{Span, Token};
 
+/// Databricks table clone depth.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum CreateTableCloneKind {
+    /// Copy only the metadata and reference the source data files.
+    Shallow,
+    /// Copy the metadata and source data files.
+    Deep,
+}
+
+impl fmt::Display for CreateTableCloneKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            Self::Shallow => "SHALLOW",
+            Self::Deep => "DEEP",
+        })
+    }
+}
+
 /// Databricks view schema adaptation mode.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -2990,12 +3010,18 @@ pub struct CreateTable {
     pub like: Option<CreateTableLikeKind>,
     /// `CLONE` clause
     pub clone: Option<ObjectName>,
+    /// Optional `SHALLOW` or `DEEP` modifier for a Databricks clone.
+    pub clone_kind: Option<CreateTableCloneKind>,
     /// Table version (for systems that support versioned tables)
     pub version: Option<TableVersion>,
     /// For Hive dialect, the table comment is after the column definitions without `=`,
     /// so the `comment` field is optional and different than the comment field in the general options list.
     /// [Hive](https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL#LanguageManualDDL-CreateTable)
     pub comment: Option<CommentDef>,
+    /// Whether the table comment followed the storage format in the input.
+    pub comment_after_hive_formats: bool,
+    /// Whether the Hive-style distribution clause followed the storage format.
+    pub hive_distribution_after_hive_formats: bool,
     /// ClickHouse "ON COMMIT" clause:
     /// <https://clickhouse.com/docs/en/sql-reference/statements/create/table/>
     pub on_commit: Option<OnCommit>,
@@ -3203,8 +3229,10 @@ impl fmt::Display for CreateTable {
 
         // Hive table comment should be after column definitions, please refer to:
         // [Hive](https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL#LanguageManualDDL-CreateTable)
-        if let Some(comment) = &self.comment {
-            write!(f, " COMMENT '{comment}'")?;
+        if !self.comment_after_hive_formats {
+            if let Some(comment) = &self.comment {
+                write!(f, " COMMENT '{comment}'")?;
+            }
         }
 
         // Only for SQLite
@@ -3217,6 +3245,9 @@ impl fmt::Display for CreateTable {
         }
 
         if let Some(c) = &self.clone {
+            if let Some(clone_kind) = &self.clone_kind {
+                write!(f, " {clone_kind}")?;
+            }
             write!(f, " CLONE {c}")?;
         }
 
@@ -3224,26 +3255,8 @@ impl fmt::Display for CreateTable {
             write!(f, " {version}")?;
         }
 
-        match &self.hive_distribution {
-            HiveDistributionStyle::PARTITIONED { columns } => {
-                write!(f, " PARTITIONED BY ({})", display_comma_separated(columns))?;
-            }
-            HiveDistributionStyle::SKEWED {
-                columns,
-                on,
-                stored_as_directories,
-            } => {
-                write!(
-                    f,
-                    " SKEWED BY ({})) ON ({})",
-                    display_comma_separated(columns),
-                    display_comma_separated(on)
-                )?;
-                if *stored_as_directories {
-                    write!(f, " STORED AS DIRECTORIES")?;
-                }
-            }
-            _ => (),
+        if !self.hive_distribution_after_hive_formats {
+            self.fmt_hive_distribution(f)?;
         }
 
         if let Some(clustered_by) = &self.clustered_by {
@@ -3292,6 +3305,14 @@ impl fmt::Display for CreateTable {
                 if let Some(loc) = location {
                     write!(f, " LOCATION '{loc}'")?;
                 }
+            }
+        }
+        if self.hive_distribution_after_hive_formats {
+            self.fmt_hive_distribution(f)?;
+        }
+        if self.comment_after_hive_formats {
+            if let Some(comment) = &self.comment {
+                write!(f, " COMMENT '{comment}'")?;
             }
         }
         if self.external {
@@ -3464,6 +3485,33 @@ impl fmt::Display for CreateTable {
             write!(f, " {with_data}")?;
         }
         Ok(())
+    }
+}
+
+impl CreateTable {
+    fn fmt_hive_distribution(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.hive_distribution {
+            HiveDistributionStyle::PARTITIONED { columns } => {
+                write!(f, " PARTITIONED BY ({})", display_comma_separated(columns))
+            }
+            HiveDistributionStyle::SKEWED {
+                columns,
+                on,
+                stored_as_directories,
+            } => {
+                write!(
+                    f,
+                    " SKEWED BY ({})) ON ({})",
+                    display_comma_separated(columns),
+                    display_comma_separated(on)
+                )?;
+                if *stored_as_directories {
+                    write!(f, " STORED AS DIRECTORIES")?;
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
 }
 

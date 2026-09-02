@@ -575,7 +575,10 @@ impl Spanned for CreateTable {
             without_rowid: _, // bool
             like: _,
             clone,
+            clone_kind: _,
             comment: _, // todo, no span
+            comment_after_hive_formats: _,
+            hive_distribution_after_hive_formats: _,
             on_commit: _,
             on_cluster: _,   // todo, clickhouse specific
             primary_key: _,  // todo, clickhouse specific
