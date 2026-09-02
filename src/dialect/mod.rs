@@ -1155,6 +1155,12 @@ pub trait Dialect: Debug + Any {
         false
     }
 
+    /// Returns true if Databricks SQL function and procedure syntax is
+    /// supported.
+    fn supports_databricks_create_routines(&self) -> bool {
+        false
+    }
+
     /// Returns true if a data type can carry a collation, including inside a
     /// nested type such as `MAP<STRING COLLATE UTF8_BINARY, STRING>`.
     fn supports_data_type_collation(&self) -> bool {

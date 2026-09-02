@@ -128,6 +128,7 @@ fn parse_create_procedure() {
         ms().verified_stmt(sql),
         Statement::CreateProcedure {
             or_alter: true,
+            or_replace: false,
             body: ConditionalStatements::BeginEnd(BeginEndStatements {
                 begin_token: AttachedToken::empty(),
                 statements: vec![Statement::Query(Box::new(Query {
@@ -202,6 +203,8 @@ fn parse_create_procedure() {
                 span: Span::empty(),
             }]),
             language: None,
+            security: None,
+            comment: None,
         }
     )
 }
@@ -270,6 +273,9 @@ fn parse_create_function() {
             called_on_null: None,
             parallel: None,
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
             using: None,
             language: None,
@@ -445,6 +451,9 @@ fn parse_create_function_parameter_default_values() {
             called_on_null: None,
             parallel: None,
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
             using: None,
             language: None,

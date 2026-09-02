@@ -223,6 +223,26 @@ impl fmt::Display for ViewSchemaMode {
     }
 }
 
+/// SQL data access declared by a routine.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum FunctionDataAccess {
+    /// The routine does not read table data.
+    ContainsSql,
+    /// The routine may read table data.
+    ReadsSqlData,
+}
+
+impl fmt::Display for FunctionDataAccess {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            Self::ContainsSql => "CONTAINS SQL",
+            Self::ReadsSqlData => "READS SQL DATA",
+        })
+    }
+}
+
 /// Index column type.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -3914,6 +3934,12 @@ pub struct CreateFunction {
     ///
     /// [PostgreSQL](https://www.postgresql.org/docs/current/sql-createfunction.html)
     pub security: Option<FunctionSecurity>,
+    /// Whether the security clause includes the `SQL` prefix.
+    pub security_has_sql: bool,
+    /// SQL data access declared by the routine.
+    pub data_access: Option<FunctionDataAccess>,
+    /// Optional routine comment.
+    pub comment: Option<String>,
     /// SET configuration_parameter clauses
     ///
     /// [PostgreSQL](https://www.postgresql.org/docs/current/sql-createfunction.html)
@@ -3985,7 +4011,17 @@ impl fmt::Display for CreateFunction {
             write!(f, " {parallel}")?;
         }
         if let Some(security) = &self.security {
-            write!(f, " {security}")?;
+            write!(
+                f,
+                " {}{security}",
+                if self.security_has_sql { "SQL " } else { "" }
+            )?;
+        }
+        if let Some(comment) = &self.comment {
+            write!(f, " COMMENT '{}'", escape_single_quote_string(comment))?;
+        }
+        if let Some(data_access) = &self.data_access {
+            write!(f, " {data_access}")?;
         }
         for set_param in &self.set_params {
             write!(f, " {set_param}")?;
@@ -4008,6 +4044,9 @@ impl fmt::Display for CreateFunction {
         }
         if let Some(CreateFunctionBody::AsReturnSelect(function_body)) = &self.function_body {
             write!(f, " AS RETURN {function_body}")?;
+        }
+        if let Some(CreateFunctionBody::ReturnSelect(function_body)) = &self.function_body {
+            write!(f, " RETURN {function_body}")?;
         }
         if let Some(using) = &self.using {
             write!(f, " {using}")?;

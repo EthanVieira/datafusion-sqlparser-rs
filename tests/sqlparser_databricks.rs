@@ -874,3 +874,27 @@ fn parse_databricks_governance_and_flow_objects() {
         .parse_sql_statements("CREATE FLOW f SELECT 1")
         .is_err());
 }
+
+#[test]
+fn parse_databricks_sql_routines() {
+    for sql in [
+        "CREATE FUNCTION add_one(x INT) RETURNS INT RETURN x + 1",
+        "CREATE OR REPLACE FUNCTION f() RETURNS STRING LANGUAGE SQL RETURN 'ok'",
+        "CREATE FUNCTION f(x INT) RETURNS TABLE(id INT) RETURN SELECT x AS id",
+        "CREATE FUNCTION f(x DOUBLE) RETURNS DOUBLE DETERMINISTIC CONTAINS SQL RETURN x * x",
+        "CREATE FUNCTION f(x INT) RETURNS INT NOT DETERMINISTIC READS SQL DATA RETURN x",
+        "CREATE FUNCTION f(x INT) RETURNS INT SQL SECURITY DEFINER RETURN x",
+    ] {
+        databricks().verified_stmt(sql);
+    }
+
+    databricks().one_statement_parses_to(
+        "CREATE OR REPLACE FUNCTION f(x STRING) RETURNS STRING COMMENT 'normalizes input' RETURN trim(x)",
+        "CREATE OR REPLACE FUNCTION f(x STRING) RETURNS STRING COMMENT 'normalizes input' RETURN TRIM(x)",
+    );
+
+    databricks().one_statement_parses_to(
+        "CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL SQL SECURITY INVOKER COMMENT 'procedure' AS BEGIN SELECT 1; END",
+        "CREATE OR REPLACE PROCEDURE p LANGUAGE SQL SQL SECURITY INVOKER COMMENT 'procedure' AS BEGIN SELECT 1; END",
+    );
+}

@@ -5329,6 +5329,10 @@ impl<'a> Parser<'a> {
             self.parse_create_schema(or_replace)
         } else if self.parse_keyword(Keyword::WAREHOUSE) {
             self.parse_create_warehouse(or_replace).map(Into::into)
+        } else if (!or_replace || self.dialect.supports_databricks_create_routines())
+            && self.parse_keyword(Keyword::PROCEDURE)
+        {
+            self.parse_create_procedure(or_alter, or_replace)
         } else if or_replace {
             self.expected_ref(
                 "[EXTERNAL] TABLE or [MATERIALIZED] VIEW or FUNCTION or SCHEMA or WAREHOUSE after CREATE OR REPLACE",
@@ -5352,8 +5356,6 @@ impl<'a> Parser<'a> {
             self.parse_create_collation().map(Into::into)
         } else if self.parse_keyword(Keyword::TYPE) {
             self.parse_create_type()
-        } else if self.parse_keyword(Keyword::PROCEDURE) {
-            self.parse_create_procedure(or_alter)
         } else if self.parse_keyword(Keyword::CONNECTOR) {
             self.parse_create_connector().map(Into::into)
         } else if self.parse_keyword(Keyword::OPERATOR) {
@@ -5942,7 +5944,10 @@ impl<'a> Parser<'a> {
         or_replace: bool,
         temporary: bool,
     ) -> Result<Statement, ParserError> {
-        if dialect_of!(self is HiveDialect) {
+        if self.dialect.supports_databricks_create_routines() {
+            self.parse_databricks_create_function(or_replace, temporary)
+                .map(Into::into)
+        } else if dialect_of!(self is HiveDialect) {
             self.parse_hive_create_function(or_replace, temporary)
                 .map(Into::into)
         } else if dialect_of!(self is PostgreSqlDialect | GenericDialect) {
@@ -5960,6 +5965,94 @@ impl<'a> Parser<'a> {
             self.prev_token();
             self.expected_ref("an object type after CREATE", self.peek_token_ref())
         }
+    }
+
+    fn parse_databricks_create_function(
+        &mut self,
+        or_replace: bool,
+        temporary: bool,
+    ) -> Result<CreateFunction, ParserError> {
+        let name = self.parse_object_name(false)?;
+        self.expect_token(&Token::LParen)?;
+        let args = if self.peek_token_ref().token == Token::RParen {
+            Vec::new()
+        } else {
+            self.parse_comma_separated(Parser::parse_function_arg)?
+        };
+        self.expect_token(&Token::RParen)?;
+        self.expect_keyword_is(Keyword::RETURNS)?;
+        let return_type = Some(self.parse_function_return_type()?);
+
+        let mut language = None;
+        let mut determinism_specifier = None;
+        let mut data_access = None;
+        let mut security = None;
+        let mut comment = None;
+        let mut function_body = None;
+        loop {
+            if self.parse_keyword(Keyword::LANGUAGE) {
+                language = Some(self.parse_identifier()?);
+            } else if self.parse_keyword(Keyword::DETERMINISTIC) {
+                determinism_specifier = Some(FunctionDeterminismSpecifier::Deterministic);
+            } else if self.parse_keywords(&[Keyword::NOT, Keyword::DETERMINISTIC]) {
+                determinism_specifier = Some(FunctionDeterminismSpecifier::NotDeterministic);
+            } else if self.parse_keywords(&[Keyword::CONTAINS, Keyword::SQL]) {
+                data_access = Some(FunctionDataAccess::ContainsSql);
+            } else if self.parse_keywords(&[Keyword::READS, Keyword::SQL, Keyword::DATA]) {
+                data_access = Some(FunctionDataAccess::ReadsSqlData);
+            } else if self.parse_keywords(&[Keyword::SQL, Keyword::SECURITY]) {
+                security = Some(
+                    match self.expect_one_of_keywords(&[Keyword::DEFINER, Keyword::INVOKER])? {
+                        Keyword::DEFINER => FunctionSecurity::Definer,
+                        Keyword::INVOKER => FunctionSecurity::Invoker,
+                        unexpected_keyword => {
+                            return Err(ParserError::ParserError(format!(
+                                "Internal parser error: expected DEFINER or INVOKER, got {unexpected_keyword:?}"
+                            )))
+                        }
+                    },
+                );
+            } else if self.parse_keyword(Keyword::COMMENT) {
+                comment = Some(self.parse_comment_value()?);
+            } else if self.parse_keyword(Keyword::RETURN) {
+                function_body = if self.peek_keyword(Keyword::SELECT) {
+                    Some(CreateFunctionBody::ReturnSelect(self.parse_select()?))
+                } else {
+                    Some(CreateFunctionBody::Return(self.parse_expr()?))
+                };
+                break;
+            } else {
+                break;
+            }
+        }
+        if function_body.is_none() {
+            return self.expected_ref("RETURN in CREATE FUNCTION", self.peek_token_ref());
+        }
+        let security_has_sql = security.is_some();
+
+        Ok(CreateFunction {
+            or_alter: false,
+            or_replace,
+            temporary,
+            if_not_exists: false,
+            name,
+            args: Some(args),
+            return_type,
+            function_body,
+            language,
+            determinism_specifier,
+            options: None,
+            remote_connection: None,
+            using: None,
+            behavior: None,
+            called_on_null: None,
+            parallel: None,
+            security,
+            security_has_sql,
+            data_access,
+            comment,
+            set_params: vec![],
+        })
     }
 
     /// Parse `CREATE FUNCTION` for [PostgreSQL]
@@ -6106,6 +6199,9 @@ impl<'a> Parser<'a> {
             called_on_null: body.called_on_null,
             parallel: body.parallel,
             security: body.security,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params,
             language: body.language,
             function_body: body.function_body,
@@ -6145,6 +6241,9 @@ impl<'a> Parser<'a> {
             called_on_null: None,
             parallel: None,
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
             language: None,
             determinism_specifier: None,
@@ -6229,6 +6328,9 @@ impl<'a> Parser<'a> {
             called_on_null: None,
             parallel: None,
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
         })
     }
@@ -6320,6 +6422,9 @@ impl<'a> Parser<'a> {
             called_on_null: None,
             parallel: None,
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
         })
     }
@@ -20769,12 +20874,42 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse `CREATE PROCEDURE` statement.
-    pub fn parse_create_procedure(&mut self, or_alter: bool) -> Result<Statement, ParserError> {
+    pub fn parse_create_procedure(
+        &mut self,
+        or_alter: bool,
+        or_replace: bool,
+    ) -> Result<Statement, ParserError> {
         let name = self.parse_object_name(false)?;
         let params = self.parse_optional_procedure_parameters()?;
 
         let language = if self.parse_keyword(Keyword::LANGUAGE) {
             Some(self.parse_identifier()?)
+        } else {
+            None
+        };
+
+        let security = if self.dialect.supports_databricks_create_routines()
+            && self.parse_keywords(&[Keyword::SQL, Keyword::SECURITY])
+        {
+            Some(
+                match self.expect_one_of_keywords(&[Keyword::DEFINER, Keyword::INVOKER])? {
+                    Keyword::DEFINER => FunctionSecurity::Definer,
+                    Keyword::INVOKER => FunctionSecurity::Invoker,
+                    unexpected_keyword => {
+                        return Err(ParserError::ParserError(format!(
+                            "Internal parser error: expected DEFINER or INVOKER, got {unexpected_keyword:?}"
+                        )))
+                    }
+                },
+            )
+        } else {
+            None
+        };
+
+        let comment = if self.dialect.supports_databricks_create_routines()
+            && self.parse_keyword(Keyword::COMMENT)
+        {
+            Some(self.parse_comment_value()?)
         } else {
             None
         };
@@ -20786,8 +20921,11 @@ impl<'a> Parser<'a> {
         Ok(Statement::CreateProcedure {
             name,
             or_alter,
+            or_replace,
             params,
             language,
+            security,
+            comment,
             body,
         })
     }

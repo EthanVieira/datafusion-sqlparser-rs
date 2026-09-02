@@ -4920,6 +4920,9 @@ $$"#;
             called_on_null: None,
             parallel: None,
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
             function_body: Some(CreateFunctionBody::AsBeforeOptions {
                 body: Expr::Value(
@@ -4963,6 +4966,9 @@ $$"#;
             called_on_null: None,
             parallel: None,
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
             function_body: Some(CreateFunctionBody::AsBeforeOptions {
                 body: Expr::Value(
@@ -5010,6 +5016,9 @@ $$"#;
             called_on_null: None,
             parallel: None,
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
             function_body: Some(CreateFunctionBody::AsBeforeOptions {
                 body: Expr::Value(
@@ -5057,6 +5066,9 @@ $$"#;
             called_on_null: None,
             parallel: None,
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
             function_body: Some(CreateFunctionBody::AsBeforeOptions {
                 body: Expr::Value(
@@ -5097,6 +5109,9 @@ $$"#;
             called_on_null: None,
             parallel: None,
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
             function_body: Some(CreateFunctionBody::AsBeforeOptions {
                 body: Expr::Value(
@@ -5140,6 +5155,9 @@ fn parse_create_function() {
             called_on_null: Some(FunctionCalledOnNull::Strict),
             parallel: Some(FunctionParallel::Safe),
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
             function_body: Some(CreateFunctionBody::AsBeforeOptions {
                 body: Expr::Value(
@@ -5279,6 +5297,9 @@ fn parse_create_function_c_with_module_pathname() {
             called_on_null: None,
             parallel: Some(FunctionParallel::Safe),
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
             function_body: Some(CreateFunctionBody::AsBeforeOptions {
                 body: Expr::Value(
@@ -7105,6 +7126,9 @@ fn parse_trigger_related_functions() {
             called_on_null: None,
             parallel: None,
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
             using: None,
             language: Some(Ident::new("plpgsql")),
