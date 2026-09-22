@@ -8951,8 +8951,32 @@ impl<'a> Parser<'a> {
 
         let like = self.maybe_parse_create_table_like(allow_unquoted_hyphen)?;
 
-        let clone = if self.parse_keyword(Keyword::CLONE) {
-            self.parse_object_name(allow_unquoted_hyphen).ok()
+        let clone_kind = if self.dialect.supports_create_table_clone_version() {
+            match self.parse_one_of_keywords(&[Keyword::SHALLOW, Keyword::DEEP]) {
+                Some(Keyword::SHALLOW) => Some(CreateTableCloneKind::Shallow),
+                Some(Keyword::DEEP) => Some(CreateTableCloneKind::Deep),
+                Some(unexpected_keyword) => {
+                    let message = format!(
+                        "Internal parser error: expected SHALLOW or DEEP, got {unexpected_keyword:?}"
+                    );
+                    return Err(ParserError::ParserError(message));
+                }
+                None => None,
+            }
+        } else {
+            None
+        };
+        let clone = if clone_kind.is_some() {
+            self.expect_keyword_is(Keyword::CLONE)?;
+            Some(self.parse_object_name(allow_unquoted_hyphen)?)
+        } else if self.parse_keyword(Keyword::CLONE) {
+            Some(self.parse_object_name(allow_unquoted_hyphen)?)
+        } else {
+            None
+        };
+
+        let version = if clone.is_some() && self.dialect.supports_create_table_clone_version() {
+            self.maybe_parse_table_version()?
         } else {
             None
         };
@@ -9111,6 +9135,8 @@ impl<'a> Parser<'a> {
             .without_rowid(without_rowid)
             .like(like)
             .clone_clause(clone)
+            .clone_kind(clone_kind)
+            .version(version)
             .comment_after_column_def(comment_after_column_def)
             .order_by(order_by)
             .on_commit(on_commit)

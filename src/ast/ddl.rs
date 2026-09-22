@@ -3254,6 +3254,9 @@ impl fmt::Display for CreateTable {
         }
 
         if let Some(c) = &self.clone {
+            if let Some(clone_kind) = &self.clone_kind {
+                write!(f, " {clone_kind}")?;
+            }
             write!(f, " CLONE {c}")?;
         }
 
