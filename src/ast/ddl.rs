@@ -56,6 +56,29 @@ use crate::display_utils::{DisplayCommaSeparated, Indent, NewLine, SpaceOrNewlin
 use crate::keywords::Keyword;
 use crate::tokenizer::{Span, Token};
 
+/// Databricks view schema adaptation mode.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum ViewSchemaMode {
+    /// Reject queries whose schema no longer matches the view definition.
+    Binding,
+    /// Apply safe casts to preserve the view schema.
+    Compensation,
+    /// Adapt the view schema to changes in the query result.
+    Evolution,
+}
+
+impl fmt::Display for ViewSchemaMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            Self::Binding => "BINDING",
+            Self::Compensation => "COMPENSATION",
+            Self::Evolution => "EVOLUTION",
+        })
+    }
+}
+
 /// Index column type.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
