@@ -3021,12 +3021,18 @@ pub struct CreateTable {
     pub like: Option<CreateTableLikeKind>,
     /// `CLONE` clause
     pub clone: Option<ObjectName>,
+    /// Optional `SHALLOW` or `DEEP` modifier for a Databricks clone.
+    pub clone_kind: Option<CreateTableCloneKind>,
     /// Table version (for systems that support versioned tables)
     pub version: Option<TableVersion>,
     /// For Hive dialect, the table comment is after the column definitions without `=`,
     /// so the `comment` field is optional and different than the comment field in the general options list.
     /// [Hive](https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL#LanguageManualDDL-CreateTable)
     pub comment: Option<CommentDef>,
+    /// Whether the table comment followed the storage format in the input.
+    pub comment_after_hive_formats: bool,
+    /// Whether the Hive-style distribution clause followed the storage format.
+    pub hive_distribution_after_hive_formats: bool,
     /// ClickHouse "ON COMMIT" clause:
     /// <https://clickhouse.com/docs/en/sql-reference/statements/create/table/>
     pub on_commit: Option<OnCommit>,

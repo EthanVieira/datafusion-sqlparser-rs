@@ -25,9 +25,9 @@ use serde::{Deserialize, Serialize};
 use sqlparser_derive::{Visit, VisitMut};
 
 use crate::ast::{
-    ClusteredBy, ColumnDef, CommentDef, CreateTable, CreateTableLikeKind, CreateTableOptions,
-    DistStyle, Expr, FileFormat, ForValues, HiveDistributionStyle, HiveFormat, Ident,
-    InitializeKind, ObjectName, OnCommit, OneOrManyWithParens, Query, RefreshModeKind,
+    ClusteredBy, ColumnDef, CommentDef, CreateTable, CreateTableCloneKind, CreateTableLikeKind,
+    CreateTableOptions, DistStyle, Expr, FileFormat, ForValues, HiveDistributionStyle, HiveFormat,
+    Ident, InitializeKind, ObjectName, OnCommit, OneOrManyWithParens, Query, RefreshModeKind,
     RowAccessPolicy, Statement, StorageLifecyclePolicy, StorageSerializationPolicy,
     TableConstraint, TableVersion, Tag, Watermark, WithData, WrappedCollection,
 };
@@ -115,10 +115,16 @@ pub struct CreateTableBuilder {
     pub like: Option<CreateTableLikeKind>,
     /// Optional `CLONE` source object name.
     pub clone: Option<ObjectName>,
+    /// Optional Databricks clone depth.
+    pub clone_kind: Option<CreateTableCloneKind>,
     /// Optional table version.
     pub version: Option<TableVersion>,
     /// Optional table comment.
     pub comment: Option<CommentDef>,
+    /// Whether the comment follows the Hive storage format.
+    pub comment_after_hive_formats: bool,
+    /// Whether the Hive distribution clause follows the storage format.
+    pub hive_distribution_after_hive_formats: bool,
     /// Optional `ON COMMIT` behavior.
     pub on_commit: Option<OnCommit>,
     /// Optional cluster identifier.
@@ -231,8 +237,11 @@ impl CreateTableBuilder {
             without_rowid: false,
             like: None,
             clone: None,
+            clone_kind: None,
             version: None,
             comment: None,
+            comment_after_hive_formats: false,
+            hive_distribution_after_hive_formats: false,
             on_commit: None,
             on_cluster: None,
             primary_key: None,
@@ -396,6 +405,11 @@ impl CreateTableBuilder {
         self.clone = clone;
         self
     }
+    /// Set the Databricks clone depth.
+    pub fn clone_kind(mut self, clone_kind: Option<CreateTableCloneKind>) -> Self {
+        self.clone_kind = clone_kind;
+        self
+    }
     /// Set table `VERSION`.
     pub fn version(mut self, version: Option<TableVersion>) -> Self {
         self.version = version;
@@ -404,6 +418,16 @@ impl CreateTableBuilder {
     /// Set a comment for the table or following column definitions.
     pub fn comment_after_column_def(mut self, comment: Option<CommentDef>) -> Self {
         self.comment = comment;
+        self
+    }
+    /// Record that the comment followed the storage format.
+    pub fn comment_after_hive_formats(mut self, after: bool) -> Self {
+        self.comment_after_hive_formats = after;
+        self
+    }
+    /// Record that the distribution clause followed the storage format.
+    pub fn hive_distribution_after_hive_formats(mut self, after: bool) -> Self {
+        self.hive_distribution_after_hive_formats = after;
         self
     }
     /// Set `ON COMMIT` behavior for temporary tables.
@@ -650,8 +674,11 @@ impl CreateTableBuilder {
             without_rowid: self.without_rowid,
             like: self.like,
             clone: self.clone,
+            clone_kind: self.clone_kind,
             version: self.version,
             comment: self.comment,
+            comment_after_hive_formats: self.comment_after_hive_formats,
+            hive_distribution_after_hive_formats: self.hive_distribution_after_hive_formats,
             on_commit: self.on_commit,
             on_cluster: self.on_cluster,
             primary_key: self.primary_key,
@@ -739,8 +766,11 @@ impl From<CreateTable> for CreateTableBuilder {
             without_rowid: table.without_rowid,
             like: table.like,
             clone: table.clone,
+            clone_kind: table.clone_kind,
             version: table.version,
             comment: table.comment,
+            comment_after_hive_formats: table.comment_after_hive_formats,
+            hive_distribution_after_hive_formats: table.hive_distribution_after_hive_formats,
             on_commit: table.on_commit,
             on_cluster: table.on_cluster,
             primary_key: table.primary_key,
