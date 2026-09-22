@@ -4544,12 +4544,18 @@ pub enum Statement {
     CreateProcedure {
         /// `OR ALTER` flag.
         or_alter: bool,
+        /// `OR REPLACE` flag.
+        or_replace: bool,
         /// Procedure name.
         name: ObjectName,
         /// Optional procedure parameters.
         params: Option<Vec<ProcedureParam>>,
         /// Optional language identifier.
         language: Option<Ident>,
+        /// Optional SQL security mode.
+        security: Option<FunctionSecurity>,
+        /// Optional procedure comment.
+        comment: Option<String>,
         /// Procedure body statements.
         body: ConditionalStatements,
     },
@@ -5545,14 +5551,18 @@ impl fmt::Display for Statement {
             Statement::CreateProcedure {
                 name,
                 or_alter,
+                or_replace,
                 params,
                 language,
+                security,
+                comment,
                 body,
             } => {
                 write!(
                     f,
-                    "CREATE {or_alter}PROCEDURE {name}",
+                    "CREATE {or_alter}{or_replace}PROCEDURE {name}",
                     or_alter = if *or_alter { "OR ALTER " } else { "" },
+                    or_replace = if *or_replace { "OR REPLACE " } else { "" },
                     name = name
                 )?;
 
@@ -5564,6 +5574,14 @@ impl fmt::Display for Statement {
 
                 if let Some(language) = language {
                     write!(f, " LANGUAGE {language}")?;
+                }
+
+                if let Some(security) = security {
+                    write!(f, " SQL {security}")?;
+                }
+
+                if let Some(comment) = comment {
+                    write!(f, " COMMENT '{}'", escape_single_quote_string(comment))?;
                 }
 
                 write!(f, " AS {body}")
