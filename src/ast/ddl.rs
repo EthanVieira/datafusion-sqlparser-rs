@@ -4485,6 +4485,9 @@ impl fmt::Display for CreateView {
         if let Some(ref comment) = self.comment {
             write!(f, " COMMENT = '{}'", escape_single_quote_string(comment))?;
         }
+        if matches!(self.options, CreateTableOptions::TableProperties(_)) {
+            write!(f, " {}", self.options)?;
+        }
         if !self.cluster_by.is_empty() {
             write!(
                 f,

@@ -6931,11 +6931,22 @@ impl<'a> Parser<'a> {
         let comment = if self.dialect.supports_create_view_comment_syntax()
             && self.parse_keyword(Keyword::COMMENT)
         {
-            self.expect_token(&Token::Eq)?;
+            if !self.dialect.supports_create_view_comment_without_equals() {
+                self.expect_token(&Token::Eq)?;
+            } else {
+                let _ = self.consume_token(&Token::Eq);
+            }
             Some(self.parse_comment_value()?)
         } else {
             None
         };
+
+        if self.dialect.supports_create_view_table_properties() {
+            let table_properties = self.parse_options(Keyword::TBLPROPERTIES)?;
+            if !table_properties.is_empty() {
+                options = CreateTableOptions::TableProperties(table_properties);
+            }
+        }
 
         self.expect_keyword_is(Keyword::AS)?;
         let query = self.parse_query()?;

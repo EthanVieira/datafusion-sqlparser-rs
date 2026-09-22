@@ -825,3 +825,11 @@ fn parse_databricks_typed_materialized_view_columns() {
         "CREATE MATERIALIZED VIEW v (id BIGINT COMMENT 'identifier', payload MAP<STRING COLLATE UTF8_BINARY, STRING>) AS SELECT 1, map()",
     );
 }
+
+#[test]
+fn parse_databricks_view_comment_and_properties() {
+    databricks().one_statement_parses_to(
+        "CREATE VIEW t COMMENT 'view' TBLPROPERTIES ('quality' = 'gold') AS SELECT 1",
+        "CREATE VIEW t COMMENT = 'view' TBLPROPERTIES ('quality' = 'gold') AS SELECT 1",
+    );
+}

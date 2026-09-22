@@ -130,6 +130,18 @@ impl Dialect for DatabricksDialect {
         true
     }
 
+    fn supports_create_view_comment_without_equals(&self) -> bool {
+        true
+    }
+
+    fn supports_create_view_comment_syntax(&self) -> bool {
+        true
+    }
+
+    fn supports_create_view_table_properties(&self) -> bool {
+        true
+    }
+
     fn supports_string_literal_backslash_escape(&self) -> bool {
         true
     }
