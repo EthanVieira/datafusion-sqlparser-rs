@@ -1219,6 +1219,11 @@ pub trait Dialect: Debug + Any {
     fn supports_databricks_create_objects(&self) -> bool {
         false
     }
+    /// Returns true if Databricks SQL function and procedure syntax is
+    /// supported.
+    fn supports_databricks_create_routines(&self) -> bool {
+        false
+    }
     /// Returns true if this dialect supports the `ARRAY` type without
     /// specifying an element type.
     ///
