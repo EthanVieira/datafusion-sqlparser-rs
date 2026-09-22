@@ -3945,6 +3945,12 @@ pub struct CreateFunction {
     ///
     /// [PostgreSQL](https://www.postgresql.org/docs/current/sql-createfunction.html)
     pub security: Option<FunctionSecurity>,
+    /// Whether the security clause includes the `SQL` prefix.
+    pub security_has_sql: bool,
+    /// SQL data access declared by the routine.
+    pub data_access: Option<FunctionDataAccess>,
+    /// Optional routine comment.
+    pub comment: Option<String>,
     /// SET configuration_parameter clauses
     ///
     /// [PostgreSQL](https://www.postgresql.org/docs/current/sql-createfunction.html)

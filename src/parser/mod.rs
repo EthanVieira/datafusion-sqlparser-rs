@@ -6241,6 +6241,9 @@ impl<'a> Parser<'a> {
             called_on_null: body.called_on_null,
             parallel: body.parallel,
             security: body.security,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params,
             language: body.language,
             function_body: body.function_body,
@@ -6280,6 +6283,9 @@ impl<'a> Parser<'a> {
             called_on_null: None,
             parallel: None,
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
             language: None,
             determinism_specifier: None,
@@ -6364,6 +6370,9 @@ impl<'a> Parser<'a> {
             called_on_null: None,
             parallel: None,
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
         })
     }
@@ -6455,6 +6464,9 @@ impl<'a> Parser<'a> {
             called_on_null: None,
             parallel: None,
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
         })
     }

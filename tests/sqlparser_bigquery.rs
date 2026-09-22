@@ -2333,6 +2333,9 @@ fn test_bigquery_create_function() {
             called_on_null: None,
             parallel: None,
             security: None,
+            security_has_sql: false,
+            data_access: None,
+            comment: None,
             set_params: vec![],
         })
     );
