@@ -67,6 +67,8 @@ use crate::parser::ParserError;
 pub struct CreateTableBuilder {
     /// Whether the statement uses `OR REPLACE`.
     pub or_replace: bool,
+    /// Whether the statement uses Databricks `OR REFRESH`.
+    pub or_refresh: bool,
     /// Whether the table is `TEMPORARY`.
     pub temporary: bool,
     /// Whether the table is `UNLOGGED`.
@@ -87,6 +89,8 @@ pub struct CreateTableBuilder {
     pub snapshot: bool,
     /// Whether `DYNAMIC` table option is set.
     pub dynamic: bool,
+    /// Whether the table is a Databricks streaming table.
+    pub streaming: bool,
     /// The table name.
     pub name: ObjectName,
     /// Column definitions for the table.
@@ -201,6 +205,7 @@ impl CreateTableBuilder {
     pub fn new(name: ObjectName) -> Self {
         Self {
             or_replace: false,
+            or_refresh: false,
             temporary: false,
             unlogged: false,
             external: false,
@@ -211,6 +216,7 @@ impl CreateTableBuilder {
             iceberg: false,
             snapshot: false,
             dynamic: false,
+            streaming: false,
             name,
             columns: vec![],
             constraints: vec![],
@@ -602,6 +608,7 @@ impl CreateTableBuilder {
     pub fn build(self) -> CreateTable {
         CreateTable {
             or_replace: self.or_replace,
+            or_refresh: self.or_refresh,
             temporary: self.temporary,
             unlogged: self.unlogged,
             external: self.external,
@@ -612,6 +619,7 @@ impl CreateTableBuilder {
             iceberg: self.iceberg,
             snapshot: self.snapshot,
             dynamic: self.dynamic,
+            streaming: self.streaming,
             name: self.name,
             columns: self.columns,
             constraints: self.constraints,
@@ -688,6 +696,7 @@ impl From<CreateTable> for CreateTableBuilder {
     fn from(table: CreateTable) -> Self {
         Self {
             or_replace: table.or_replace,
+            or_refresh: table.or_refresh,
             temporary: table.temporary,
             unlogged: table.unlogged,
             external: table.external,
@@ -698,6 +707,7 @@ impl From<CreateTable> for CreateTableBuilder {
             iceberg: table.iceberg,
             snapshot: table.snapshot,
             dynamic: table.dynamic,
+            streaming: table.streaming,
             name: table.name,
             columns: table.columns,
             constraints: table.constraints,
