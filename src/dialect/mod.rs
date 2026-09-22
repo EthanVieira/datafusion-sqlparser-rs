@@ -1185,6 +1185,35 @@ pub trait Dialect: Debug + Any {
         false
     }
 
+    /// Returns true if `CREATE TABLE` accepts a `CLUSTER BY` clause.
+    fn supports_create_table_cluster_by(&self) -> bool {
+        false
+    }
+
+    /// Returns true if options may omit the equals sign between key and value.
+    ///
+    /// Example: `OPTIONS (path 's3://bucket/data')`.
+    fn supports_options_without_equals(&self) -> bool {
+        false
+    }
+
+    /// Returns true if `CREATE TABLE ... USING ... PARTITIONED BY ...` is
+    /// accepted, with the distribution clause following the storage format.
+    fn supports_create_table_distribution_after_format(&self) -> bool {
+        false
+    }
+
+    /// Returns true if a table comment may follow the storage format.
+    fn supports_create_table_comment_after_format(&self) -> bool {
+        false
+    }
+
+    /// Returns true if table clones accept an optional `SHALLOW` or `DEEP`
+    /// modifier and `VERSION | TIMESTAMP AS OF` suffix.
+    fn supports_create_table_clone_version(&self) -> bool {
+        false
+    }
+
     /// Returns true if this dialect supports the `ARRAY` type without
     /// specifying an element type.
     ///
