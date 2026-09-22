@@ -6900,7 +6900,11 @@ impl<'a> Parser<'a> {
             copy_grants = self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]);
         }
         let mut options = CreateTableOptions::None;
-        let with_options = self.parse_options(Keyword::WITH)?;
+        let with_options = if self.peek_keywords(&[Keyword::WITH, Keyword::SCHEMA]) {
+            Vec::new()
+        } else {
+            self.parse_options(Keyword::WITH)?
+        };
         if !with_options.is_empty() {
             options = CreateTableOptions::With(with_options);
         }
@@ -6948,6 +6952,29 @@ impl<'a> Parser<'a> {
             }
         }
 
+        let schema_mode = if self.dialect.supports_create_view_schema_mode()
+            && self.parse_keywords(&[Keyword::WITH, Keyword::SCHEMA])
+        {
+            Some(
+                match self.expect_one_of_keywords(&[
+                    Keyword::BINDING,
+                    Keyword::COMPENSATION,
+                    Keyword::EVOLUTION,
+                ])? {
+                    Keyword::BINDING => ViewSchemaMode::Binding,
+                    Keyword::COMPENSATION => ViewSchemaMode::Compensation,
+                    Keyword::EVOLUTION => ViewSchemaMode::Evolution,
+                    unexpected_keyword => {
+                        return Err(ParserError::ParserError(format!(
+                            "Internal parser error: expected a view schema mode, got {unexpected_keyword:?}"
+                        )))
+                    }
+                },
+            )
+        } else {
+            None
+        };
+
         self.expect_keyword_is(Keyword::AS)?;
         let query = self.parse_query()?;
         // Optional `WITH [ CASCADED | LOCAL ] CHECK OPTION` is widely supported here.
@@ -6969,7 +6996,7 @@ impl<'a> Parser<'a> {
             secure,
             or_replace,
             or_refresh: false,
-            schema_mode: None,
+            schema_mode,
             options,
             cluster_by,
             comment,

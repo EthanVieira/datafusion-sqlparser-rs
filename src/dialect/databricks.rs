@@ -142,6 +142,10 @@ impl Dialect for DatabricksDialect {
         true
     }
 
+    fn supports_create_view_schema_mode(&self) -> bool {
+        true
+    }
+
     fn supports_string_literal_backslash_escape(&self) -> bool {
         true
     }

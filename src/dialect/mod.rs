@@ -1163,6 +1163,12 @@ pub trait Dialect: Debug + Any {
         false
     }
 
+    /// Returns true if views accept `WITH SCHEMA BINDING`, `WITH SCHEMA
+    /// COMPENSATION`, or `WITH SCHEMA EVOLUTION` before `AS`.
+    fn supports_create_view_schema_mode(&self) -> bool {
+        false
+    }
+
     /// Returns true if this dialect supports the `ARRAY` type without
     /// specifying an element type.
     ///

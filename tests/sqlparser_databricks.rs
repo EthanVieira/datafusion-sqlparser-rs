@@ -833,3 +833,14 @@ fn parse_databricks_view_comment_and_properties() {
         "CREATE VIEW t COMMENT = 'view' TBLPROPERTIES ('quality' = 'gold') AS SELECT 1",
     );
 }
+
+#[test]
+fn parse_databricks_view_schema_modes() {
+    for sql in [
+        "CREATE VIEW t WITH SCHEMA BINDING AS SELECT 1",
+        "CREATE VIEW t WITH SCHEMA COMPENSATION AS SELECT 1",
+        "CREATE VIEW t WITH SCHEMA EVOLUTION AS SELECT 1",
+    ] {
+        databricks().verified_stmt(sql);
+    }
+}
