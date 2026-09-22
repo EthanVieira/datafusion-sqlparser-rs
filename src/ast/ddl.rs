@@ -3264,26 +3264,8 @@ impl fmt::Display for CreateTable {
             write!(f, " {version}")?;
         }
 
-        match &self.hive_distribution {
-            HiveDistributionStyle::PARTITIONED { columns } => {
-                write!(f, " PARTITIONED BY ({})", display_comma_separated(columns))?;
-            }
-            HiveDistributionStyle::SKEWED {
-                columns,
-                on,
-                stored_as_directories,
-            } => {
-                write!(
-                    f,
-                    " SKEWED BY ({})) ON ({})",
-                    display_comma_separated(columns),
-                    display_comma_separated(on)
-                )?;
-                if *stored_as_directories {
-                    write!(f, " STORED AS DIRECTORIES")?;
-                }
-            }
-            _ => (),
+        if !self.hive_distribution_after_hive_formats {
+            self.fmt_hive_distribution(f)?;
         }
 
         if let Some(clustered_by) = &self.clustered_by {
@@ -3504,6 +3486,33 @@ impl fmt::Display for CreateTable {
             write!(f, " {with_data}")?;
         }
         Ok(())
+    }
+}
+
+impl CreateTable {
+    fn fmt_hive_distribution(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.hive_distribution {
+            HiveDistributionStyle::PARTITIONED { columns } => {
+                write!(f, " PARTITIONED BY ({})", display_comma_separated(columns))
+            }
+            HiveDistributionStyle::SKEWED {
+                columns,
+                on,
+                stored_as_directories,
+            } => {
+                write!(
+                    f,
+                    " SKEWED BY ({})) ON ({})",
+                    display_comma_separated(columns),
+                    display_comma_separated(on)
+                )?;
+                if *stored_as_directories {
+                    write!(f, " STORED AS DIRECTORIES")?;
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
 }
 
