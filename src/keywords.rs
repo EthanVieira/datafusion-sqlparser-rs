@@ -1170,6 +1170,7 @@ define_keywords!(
     WAITFOR,
     WAREHOUSE,
     WAREHOUSES,
+    WATERMARK,
     WEEK,
     WEEKS,
     WHEN,
@@ -1265,6 +1266,7 @@ pub const RESERVED_FOR_TABLE_ALIAS: &[Keyword] = &[
     // Reserved for Snowflake table sample
     Keyword::SAMPLE,
     Keyword::TABLESAMPLE,
+    Keyword::WATERMARK,
     Keyword::FROM,
     Keyword::OPEN,
 ];

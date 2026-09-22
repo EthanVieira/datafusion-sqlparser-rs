@@ -154,6 +154,10 @@ impl Dialect for DatabricksDialect {
         true
     }
 
+    fn supports_watermark_clause(&self) -> bool {
+        true
+    }
+
     fn supports_string_literal_backslash_escape(&self) -> bool {
         true
     }

@@ -1179,6 +1179,12 @@ pub trait Dialect: Debug + Any {
         false
     }
 
+    /// Returns true if a streaming table query can end with a Databricks
+    /// `WATERMARK column DELAY OF interval` clause.
+    fn supports_watermark_clause(&self) -> bool {
+        false
+    }
+
     /// Returns true if this dialect supports the `ARRAY` type without
     /// specifying an element type.
     ///

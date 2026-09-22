@@ -9071,6 +9071,18 @@ impl<'a> Parser<'a> {
             None
         };
 
+        let watermark = if streaming
+            && self.dialect.supports_watermark_clause()
+            && self.parse_keyword(Keyword::WATERMARK)
+        {
+            let event_time = self.parse_expr()?;
+            self.expect_keywords(&[Keyword::DELAY, Keyword::OF])?;
+            let delay = self.parse_expr()?;
+            Some(Watermark { event_time, delay })
+        } else {
+            None
+        };
+
         // `WITH DATA` clause only applies if there is a query body.
         let with_data = if query.is_some() {
             self.maybe_parse_with_data()?
@@ -9095,6 +9107,7 @@ impl<'a> Parser<'a> {
             .hive_formats(hive_formats)
             .global(global)
             .query(query)
+            .watermark(watermark)
             .without_rowid(without_rowid)
             .like(like)
             .clone_clause(clone)

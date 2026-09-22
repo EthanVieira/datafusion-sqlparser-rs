@@ -816,4 +816,7 @@ fn parse_databricks_streaming_table() {
     databricks().verified_stmt(
         "CREATE OR REFRESH STREAMING TABLE main.models.events AS SELECT event_id FROM STREAM(main.raw.events)",
     );
+    databricks().verified_stmt(
+        "CREATE OR REFRESH STREAMING TABLE main.models.events AS SELECT event_id FROM STREAM(main.raw.events) WATERMARK event_time DELAY OF INTERVAL 10 MINUTES",
+    );
 }
