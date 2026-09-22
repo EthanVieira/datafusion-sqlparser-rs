@@ -5520,6 +5520,44 @@ impl<'a> Parser<'a> {
             || (self.peek_word(0, "FOREIGN") && self.peek_word(1, "CATALOG"))
     }
 
+    fn parse_databricks_object_kind(&mut self) -> Result<DatabricksObjectKind, ParserError> {
+        let first = self.parse_identifier()?.value.to_ascii_uppercase();
+        let kind = match first.as_str() {
+            "FLOW" => DatabricksObjectKind::Flow,
+            "CATALOG" => DatabricksObjectKind::Catalog,
+            "VOLUME" => DatabricksObjectKind::Volume,
+            "CONNECTION" => DatabricksObjectKind::Connection,
+            "SHARE" => DatabricksObjectKind::Share,
+            "RECIPIENT" => DatabricksObjectKind::Recipient,
+            "PROVIDER" => DatabricksObjectKind::Provider,
+            "EXTERNAL" => match self.parse_identifier()?.value.to_ascii_uppercase().as_str() {
+                "VOLUME" => DatabricksObjectKind::ExternalVolume,
+                "LOCATION" => DatabricksObjectKind::ExternalLocation,
+                _ => {
+                    return self
+                        .expected_ref("VOLUME or LOCATION after EXTERNAL", self.peek_token_ref())
+                }
+            },
+            "STORAGE" => {
+                let credential = self.parse_identifier()?;
+                debug_assert!(credential.value.eq_ignore_ascii_case("CREDENTIAL"));
+                DatabricksObjectKind::StorageCredential
+            }
+            "FOREIGN" => {
+                let catalog = self.parse_identifier()?;
+                debug_assert!(catalog.value.eq_ignore_ascii_case("CATALOG"));
+                DatabricksObjectKind::ForeignCatalog
+            }
+            _ => {
+                return self.expected_ref(
+                    "a Databricks governance or Lakeflow object type",
+                    self.peek_token_ref(),
+                )
+            }
+        };
+        Ok(kind)
+    }
+
     fn parse_text_search_object_type(&mut self) -> Result<TextSearchObjectType, ParserError> {
         match self.expect_one_of_keywords(&[
             Keyword::DICTIONARY,
