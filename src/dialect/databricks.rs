@@ -126,6 +126,10 @@ impl Dialect for DatabricksDialect {
         true
     }
 
+    fn supports_typed_view_columns(&self) -> bool {
+        true
+    }
+
     fn supports_string_literal_backslash_escape(&self) -> bool {
         true
     }

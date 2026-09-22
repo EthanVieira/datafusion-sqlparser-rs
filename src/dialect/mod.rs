@@ -1144,6 +1144,14 @@ pub trait Dialect: Debug + Any {
         false
     }
 
+    /// Returns true if this dialect supports typed column definitions in
+    /// `CREATE VIEW`, followed by ordinary column options.
+    ///
+    /// Example: `CREATE MATERIALIZED VIEW v (id BIGINT) AS SELECT 1`.
+    fn supports_typed_view_columns(&self) -> bool {
+        false
+    }
+
     /// Returns true if this dialect supports the `ARRAY` type without
     /// specifying an element type.
     ///
