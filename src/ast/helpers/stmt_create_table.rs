@@ -277,6 +277,16 @@ impl CreateTableBuilder {
         self.or_replace = or_replace;
         self
     }
+    /// Set Databricks `OR REFRESH` for the CREATE TABLE statement.
+    pub fn or_refresh(mut self, or_refresh: bool) -> Self {
+        self.or_refresh = or_refresh;
+        self
+    }
+    /// Mark the table as a Databricks streaming table.
+    pub fn streaming(mut self, streaming: bool) -> Self {
+        self.streaming = streaming;
+        self
+    }
     /// Mark the table as `TEMPORARY`.
     pub fn temporary(mut self, temporary: bool) -> Self {
         self.temporary = temporary;

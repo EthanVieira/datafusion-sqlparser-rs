@@ -150,6 +150,10 @@ impl Dialect for DatabricksDialect {
         true
     }
 
+    fn supports_streaming_tables(&self) -> bool {
+        true
+    }
+
     fn supports_string_literal_backslash_escape(&self) -> bool {
         true
     }
