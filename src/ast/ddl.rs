@@ -56,6 +56,53 @@ use crate::display_utils::{DisplayCommaSeparated, Indent, NewLine, SpaceOrNewlin
 use crate::keywords::Keyword;
 use crate::tokenizer::{Span, Token};
 
+/// A Databricks governance or Lakeflow object type.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum DatabricksObjectKind {
+    /// A Lakeflow flow.
+    Flow,
+    /// A Unity Catalog catalog.
+    Catalog,
+    /// A managed volume.
+    Volume,
+    /// An external volume.
+    ExternalVolume,
+    /// A storage credential.
+    StorageCredential,
+    /// An external location.
+    ExternalLocation,
+    /// A Lakehouse Federation connection.
+    Connection,
+    /// A foreign catalog.
+    ForeignCatalog,
+    /// A Delta Sharing share.
+    Share,
+    /// A Delta Sharing recipient.
+    Recipient,
+    /// A Delta Sharing provider.
+    Provider,
+}
+
+impl fmt::Display for DatabricksObjectKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            Self::Flow => "FLOW",
+            Self::Catalog => "CATALOG",
+            Self::Volume => "VOLUME",
+            Self::ExternalVolume => "EXTERNAL VOLUME",
+            Self::StorageCredential => "STORAGE CREDENTIAL",
+            Self::ExternalLocation => "EXTERNAL LOCATION",
+            Self::Connection => "CONNECTION",
+            Self::ForeignCatalog => "FOREIGN CATALOG",
+            Self::Share => "SHARE",
+            Self::Recipient => "RECIPIENT",
+            Self::Provider => "PROVIDER",
+        })
+    }
+}
+
 /// Databricks table clone depth.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
