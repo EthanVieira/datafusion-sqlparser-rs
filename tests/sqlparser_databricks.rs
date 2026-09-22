@@ -945,3 +945,11 @@ fn parse_databricks_sql_functions() {
         databricks().verified_stmt(sql);
     }
 }
+
+#[test]
+fn parse_databricks_sql_procedure() {
+    databricks().one_statement_parses_to(
+        "CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL SQL SECURITY INVOKER COMMENT 'procedure' AS BEGIN SELECT 1; END",
+        "CREATE OR REPLACE PROCEDURE p LANGUAGE SQL SQL SECURITY INVOKER COMMENT 'procedure' AS BEGIN SELECT 1; END",
+    );
+}

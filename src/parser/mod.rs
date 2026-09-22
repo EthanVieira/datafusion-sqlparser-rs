@@ -5447,6 +5447,10 @@ impl<'a> Parser<'a> {
             self.parse_create_schema(or_replace)
         } else if self.parse_keyword(Keyword::WAREHOUSE) {
             self.parse_create_warehouse(or_replace).map(Into::into)
+        } else if (!or_replace || self.dialect.supports_databricks_create_routines())
+            && self.parse_keyword(Keyword::PROCEDURE)
+        {
+            self.parse_create_procedure(or_alter, or_replace)
         } else if or_replace {
             self.expected_ref(
                 "[EXTERNAL] TABLE or [MATERIALIZED] VIEW or FUNCTION or SCHEMA or WAREHOUSE after CREATE OR REPLACE",
@@ -5470,10 +5474,8 @@ impl<'a> Parser<'a> {
             self.parse_create_collation().map(Into::into)
         } else if self.parse_keyword(Keyword::TYPE) {
             self.parse_create_type()
-        } else if self.parse_keyword(Keyword::PROCEDURE)
-            || self.dialect.supports_create_proc_syntax() && self.parse_keyword(Keyword::PROC)
-        {
-            self.parse_create_procedure(or_alter)
+        } else if self.dialect.supports_create_proc_syntax() && self.parse_keyword(Keyword::PROC) {
+            self.parse_create_procedure(or_alter, or_replace)
         } else if self.parse_keyword(Keyword::CONNECTOR) {
             self.parse_create_connector().map(Into::into)
         } else if self.parse_keyword(Keyword::OPERATOR) {
@@ -21187,12 +21189,42 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse `CREATE PROCEDURE` statement.
-    pub fn parse_create_procedure(&mut self, or_alter: bool) -> Result<Statement, ParserError> {
+    pub fn parse_create_procedure(
+        &mut self,
+        or_alter: bool,
+        or_replace: bool,
+    ) -> Result<Statement, ParserError> {
         let name = self.parse_object_name(false)?;
         let params = self.parse_optional_procedure_parameters()?;
 
         let language = if self.parse_keyword(Keyword::LANGUAGE) {
             Some(self.parse_identifier()?)
+        } else {
+            None
+        };
+
+        let security = if self.dialect.supports_databricks_create_routines()
+            && self.parse_keywords(&[Keyword::SQL, Keyword::SECURITY])
+        {
+            Some(
+                match self.expect_one_of_keywords(&[Keyword::DEFINER, Keyword::INVOKER])? {
+                    Keyword::DEFINER => FunctionSecurity::Definer,
+                    Keyword::INVOKER => FunctionSecurity::Invoker,
+                    unexpected_keyword => {
+                        return Err(ParserError::ParserError(format!(
+                            "Internal parser error: expected DEFINER or INVOKER, got {unexpected_keyword:?}"
+                        )))
+                    }
+                },
+            )
+        } else {
+            None
+        };
+
+        let comment = if self.dialect.supports_databricks_create_routines()
+            && self.parse_keyword(Keyword::COMMENT)
+        {
+            Some(self.parse_comment_value()?)
         } else {
             None
         };
@@ -21204,8 +21236,11 @@ impl<'a> Parser<'a> {
         Ok(Statement::CreateProcedure {
             name,
             or_alter,
+            or_replace,
             params,
             language,
+            security,
+            comment,
             body,
         })
     }
