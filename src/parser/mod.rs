@@ -5826,6 +5826,30 @@ impl<'a> Parser<'a> {
             None
         };
 
+        let comment = if self.dialect.supports_databricks_create_objects()
+            && self.parse_keyword(Keyword::COMMENT)
+        {
+            Some(self.parse_comment_value()?)
+        } else {
+            None
+        };
+
+        let location = if self.dialect.supports_databricks_create_objects()
+            && self.parse_keyword(Keyword::LOCATION)
+        {
+            Some(self.parse_literal_string()?)
+        } else {
+            None
+        };
+
+        let dbproperties = if self.dialect.supports_databricks_create_objects()
+            && self.peek_keywords(&[Keyword::WITH, Keyword::DBPROPERTIES])
+        {
+            Some(self.parse_options_with_keywords(&[Keyword::WITH, Keyword::DBPROPERTIES])?)
+        } else {
+            None
+        };
+
         Ok(Statement::CreateSchema {
             schema_name,
             or_replace,
@@ -5833,6 +5857,9 @@ impl<'a> Parser<'a> {
             with,
             options,
             default_collate_spec,
+            comment,
+            location,
+            dbproperties,
             clone,
         })
     }

@@ -904,3 +904,11 @@ fn parse_databricks_create_table_cluster_by() {
         "CREATE OR REFRESH STREAMING TABLE main.models.events CLUSTER BY (event_id) AS SELECT event_id FROM STREAM(main.raw.events)",
     );
 }
+
+#[test]
+fn parse_databricks_create_schema() {
+    databricks().one_statement_parses_to(
+        "CREATE SCHEMA IF NOT EXISTS analytics.reporting COMMENT 'reporting' LOCATION 's3://bucket/reporting' WITH DBPROPERTIES (owner 'analytics')",
+        "CREATE SCHEMA IF NOT EXISTS analytics.reporting COMMENT 'reporting' LOCATION 's3://bucket/reporting' WITH DBPROPERTIES (owner = 'analytics')",
+    );
+}

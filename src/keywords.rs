@@ -303,6 +303,7 @@ define_keywords!(
     DAYOFWEEK,
     DAYOFYEAR,
     DAYS,
+    DBPROPERTIES,
     DCPROPERTIES,
     DEALLOCATE,
     DEC,
