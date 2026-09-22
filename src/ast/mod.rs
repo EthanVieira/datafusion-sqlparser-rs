@@ -10486,6 +10486,11 @@ pub enum CreateFunctionBody {
     ///
     /// [MsSql]: https://learn.microsoft.com/en-us/sql/t-sql/statements/create-function-transact-sql?view=sql-server-ver16#select_stmt
     AsReturnSelect(Select),
+
+    /// A function body using `RETURN` followed by an unparenthesized query.
+    ///
+    /// [Databricks]: https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-ddl-create-sql-function
+    ReturnSelect(Select),
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
