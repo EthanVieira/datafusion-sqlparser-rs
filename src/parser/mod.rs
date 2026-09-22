@@ -6892,7 +6892,7 @@ impl<'a> Parser<'a> {
         let mut copy_grants = self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]);
         // Many dialects support `OR ALTER` right after `CREATE`, but we don't (yet).
         // ANSI SQL and Postgres support RECURSIVE here, but we don't support it either.
-        let columns = self.parse_view_columns()?;
+        let columns = self.parse_view_columns(materialized)?;
         // Snowflake also documents `COPY GRANTS` *after* the column list; accept
         // either position, but not both.
         // <https://docs.snowflake.com/en/sql-reference/sql/create-view#syntax>
@@ -14177,17 +14177,28 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses a parenthesized, comma-separated list of column definitions within a view.
-    fn parse_view_columns(&mut self) -> Result<Vec<ViewColumnDef>, ParserError> {
+    fn parse_view_columns(
+        &mut self,
+        materialized: bool,
+    ) -> Result<Vec<ViewColumnDef>, ParserError> {
         if self.consume_token(&Token::LParen) {
             if self.peek_token_ref().token == Token::RParen {
                 self.next_token();
                 Ok(vec![])
             } else {
-                let cols = self.parse_comma_separated_with_trailing_commas(
-                    Parser::parse_view_column,
-                    self.dialect.supports_column_definition_trailing_commas(),
-                    Self::is_reserved_for_column_alias,
-                )?;
+                let cols = if materialized && self.dialect.supports_typed_view_columns() {
+                    self.parse_comma_separated_with_trailing_commas(
+                        Parser::parse_typed_view_column,
+                        self.dialect.supports_column_definition_trailing_commas(),
+                        Self::is_reserved_for_column_alias,
+                    )?
+                } else {
+                    self.parse_comma_separated_with_trailing_commas(
+                        Parser::parse_view_column,
+                        self.dialect.supports_column_definition_trailing_commas(),
+                        Self::is_reserved_for_column_alias,
+                    )?
+                };
                 self.expect_token(&Token::RParen)?;
                 Ok(cols)
             }
@@ -14205,6 +14216,17 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
+        Ok(ViewColumnDef {
+            name,
+            data_type,
+            options,
+        })
+    }
+
+    fn parse_typed_view_column(&mut self) -> Result<ViewColumnDef, ParserError> {
+        let name = self.parse_identifier()?;
+        let data_type = Some(self.parse_data_type()?);
+        let options = self.parse_view_column_options()?;
         Ok(ViewColumnDef {
             name,
             data_type,

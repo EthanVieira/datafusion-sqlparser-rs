@@ -818,3 +818,10 @@ fn parse_databricks_multipart_table_query() {
         }))
     );
 }
+
+#[test]
+fn parse_databricks_typed_materialized_view_columns() {
+    databricks().verified_stmt(
+        "CREATE MATERIALIZED VIEW v (id BIGINT COMMENT 'identifier', payload MAP<STRING COLLATE UTF8_BINARY, STRING>) AS SELECT 1, map()",
+    );
+}
