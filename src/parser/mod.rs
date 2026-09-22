@@ -9373,7 +9373,9 @@ impl<'a> Parser<'a> {
         };
 
         let mut cluster_by = None;
-        if dialect_of!(self is BigQueryDialect | GenericDialect) {
+        if dialect_of!(self is BigQueryDialect | GenericDialect)
+            || self.dialect.supports_create_table_cluster_by()
+        {
             if self.parse_keywords(&[Keyword::CLUSTER, Keyword::BY]) {
                 cluster_by = Some(WrappedCollection::NoWrapping(
                     self.parse_comma_separated(|p| p.parse_expr())?,
