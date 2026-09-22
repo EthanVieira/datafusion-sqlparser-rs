@@ -864,3 +864,18 @@ fn parse_databricks_streaming_table() {
         "CREATE OR REFRESH STREAMING TABLE main.models.events AS SELECT event_id FROM STREAM(main.raw.events) WATERMARK event_time DELAY OF INTERVAL 10 MINUTES",
     );
 }
+
+#[test]
+fn parse_databricks_create_table_clone() {
+    for sql in [
+        "CREATE TABLE t SHALLOW CLONE source_table",
+        "CREATE TABLE t DEEP CLONE source_table",
+        "CREATE TABLE t CLONE source_table VERSION AS OF 7",
+        "CREATE TABLE t CLONE source_table TIMESTAMP AS OF '2024-01-01'",
+    ] {
+        databricks().verified_stmt(sql);
+    }
+    assert!(databricks()
+        .parse_sql_statements("CREATE TABLE t SHALLOW")
+        .is_err());
+}
