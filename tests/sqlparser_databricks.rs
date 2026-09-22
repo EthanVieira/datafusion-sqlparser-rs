@@ -897,3 +897,10 @@ fn parse_databricks_options_without_equals() {
         "CREATE TABLE t () USING PARQUET OPTIONS(path = 's3://bucket/t')",
     );
 }
+
+#[test]
+fn parse_databricks_create_table_cluster_by() {
+    databricks().verified_stmt(
+        "CREATE OR REFRESH STREAMING TABLE main.models.events CLUSTER BY (event_id) AS SELECT event_id FROM STREAM(main.raw.events)",
+    );
+}
