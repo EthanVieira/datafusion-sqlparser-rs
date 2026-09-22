@@ -810,3 +810,10 @@ fn parse_databricks_refreshable_materialized_view() {
         .parse_sql_statements("CREATE OR REFRESH VIEW t AS SELECT 1")
         .is_err());
 }
+
+#[test]
+fn parse_databricks_streaming_table() {
+    databricks().verified_stmt(
+        "CREATE OR REFRESH STREAMING TABLE main.models.events AS SELECT event_id FROM STREAM(main.raw.events)",
+    );
+}

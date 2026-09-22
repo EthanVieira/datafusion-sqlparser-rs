@@ -5378,14 +5378,23 @@ impl<'a> Parser<'a> {
             self.parse_create_snapshot_table().map(Into::into)
         } else if self.peek_keywords(&[Keyword::TEXT, Keyword::SEARCH]) {
             self.parse_create_text_search().map(Into::into)
+        } else if self.dialect.supports_streaming_tables()
+            && self.parse_keywords(&[Keyword::STREAMING, Keyword::TABLE])
+        {
+            self.parse_create_table(
+                or_replace, or_refresh, true, temporary, unlogged, global, transient, volatile,
+                multiset,
+            )
+            .map(Into::into)
         } else if or_refresh && self.peek_keyword(Keyword::TABLE) {
             self.expected_ref(
-                "MATERIALIZED VIEW after CREATE OR REFRESH",
+                "STREAMING TABLE or MATERIALIZED VIEW after CREATE OR REFRESH",
                 self.peek_token_ref(),
             )
         } else if self.parse_keyword(Keyword::TABLE) {
             self.parse_create_table(
-                or_replace, temporary, unlogged, global, transient, volatile, multiset,
+                or_replace, or_refresh, false, temporary, unlogged, global, transient, volatile,
+                multiset,
             )
             .map(Into::into)
         } else if self.peek_keyword(Keyword::MATERIALIZED)
@@ -8896,6 +8905,8 @@ impl<'a> Parser<'a> {
     pub fn parse_create_table(
         &mut self,
         or_replace: bool,
+        or_refresh: bool,
+        streaming: bool,
         temporary: bool,
         unlogged: bool,
         global: Option<bool>,
@@ -9073,6 +9084,8 @@ impl<'a> Parser<'a> {
             .columns(columns)
             .constraints(constraints)
             .or_replace(or_replace)
+            .or_refresh(or_refresh)
+            .streaming(streaming)
             .if_not_exists(if_not_exists)
             .transient(transient)
             .volatile(volatile)

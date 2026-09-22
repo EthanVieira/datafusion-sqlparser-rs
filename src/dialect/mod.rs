@@ -1174,6 +1174,11 @@ pub trait Dialect: Debug + Any {
         false
     }
 
+    /// Returns true if the dialect supports `CREATE [OR REFRESH] STREAMING TABLE`.
+    fn supports_streaming_tables(&self) -> bool {
+        false
+    }
+
     /// Returns true if this dialect supports the `ARRAY` type without
     /// specifying an element type.
     ///
