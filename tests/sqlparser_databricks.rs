@@ -800,3 +800,13 @@ fn parse_databricks_view_schema_modes() {
         databricks().verified_stmt(sql);
     }
 }
+
+#[test]
+fn parse_databricks_refreshable_materialized_view() {
+    databricks().verified_stmt(
+        "CREATE OR REFRESH MATERIALIZED VIEW main.models.rollup AS SELECT id FROM main.raw.source",
+    );
+    assert!(databricks()
+        .parse_sql_statements("CREATE OR REFRESH VIEW t AS SELECT 1")
+        .is_err());
+}

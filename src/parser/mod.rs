@@ -5348,6 +5348,9 @@ impl<'a> Parser<'a> {
     pub fn parse_create(&mut self) -> Result<Statement, ParserError> {
         let modifier_loc = self.peek_token_ref().span.start;
         let or_replace = self.parse_keywords(&[Keyword::OR, Keyword::REPLACE]);
+        let or_refresh = !or_replace
+            && self.dialect.supports_create_or_refresh()
+            && self.parse_keywords(&[Keyword::OR, Keyword::REFRESH]);
         let or_alter = self.parse_keywords(&[Keyword::OR, Keyword::ALTER]);
         let multiset = self.maybe_parse_multiset();
         let local = self.parse_one_of_keywords(&[Keyword::LOCAL]).is_some();
@@ -5375,6 +5378,11 @@ impl<'a> Parser<'a> {
             self.parse_create_snapshot_table().map(Into::into)
         } else if self.peek_keywords(&[Keyword::TEXT, Keyword::SEARCH]) {
             self.parse_create_text_search().map(Into::into)
+        } else if or_refresh && self.peek_keyword(Keyword::TABLE) {
+            self.expected_ref(
+                "MATERIALIZED VIEW after CREATE OR REFRESH",
+                self.peek_token_ref(),
+            )
         } else if self.parse_keyword(Keyword::TABLE) {
             self.parse_create_table(
                 or_replace, temporary, unlogged, global, transient, volatile, multiset,
@@ -5385,8 +5393,14 @@ impl<'a> Parser<'a> {
             || self.peek_keywords(&[Keyword::SECURE, Keyword::MATERIALIZED, Keyword::VIEW])
             || self.peek_keywords(&[Keyword::SECURE, Keyword::VIEW])
         {
-            self.parse_create_view(or_alter, or_replace, temporary, create_view_params)
-                .map(Into::into)
+            self.parse_create_view(
+                or_alter,
+                or_replace,
+                or_refresh,
+                temporary,
+                create_view_params,
+            )
+            .map(Into::into)
         } else if self.parse_keyword(Keyword::POLICY) {
             self.parse_create_policy().map(Into::into)
         } else if self.parse_keyword(Keyword::EXTERNAL) {
@@ -6874,11 +6888,18 @@ impl<'a> Parser<'a> {
         &mut self,
         or_alter: bool,
         or_replace: bool,
+        or_refresh: bool,
         temporary: bool,
         create_view_params: Option<CreateViewParams>,
     ) -> Result<CreateView, ParserError> {
         let secure = self.parse_keyword(Keyword::SECURE);
         let materialized = self.parse_keyword(Keyword::MATERIALIZED);
+        if or_refresh && !materialized {
+            return self.expected_ref(
+                "MATERIALIZED VIEW after CREATE OR REFRESH",
+                self.peek_token_ref(),
+            );
+        }
         self.expect_keyword_is(Keyword::VIEW)?;
         let allow_unquoted_hyphen = dialect_of!(self is BigQueryDialect);
         // Tries to parse IF NOT EXISTS either before name or after name
@@ -6995,7 +7016,7 @@ impl<'a> Parser<'a> {
             materialized,
             secure,
             or_replace,
-            or_refresh: false,
+            or_refresh,
             schema_mode,
             options,
             cluster_by,
