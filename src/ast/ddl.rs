@@ -4515,6 +4515,9 @@ impl fmt::Display for CreateView {
         if matches!(self.options, CreateTableOptions::TableProperties(_)) {
             write!(f, " {}", self.options)?;
         }
+        if let Some(schema_mode) = &self.schema_mode {
+            write!(f, " WITH SCHEMA {schema_mode}")?;
+        }
         if !self.cluster_by.is_empty() {
             write!(
                 f,
