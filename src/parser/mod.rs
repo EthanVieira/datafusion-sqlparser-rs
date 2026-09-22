@@ -10785,7 +10785,11 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let name = self.parse_identifier()?;
-                self.expect_token(&Token::Eq)?;
+                if !self.consume_token(&Token::Eq)
+                    && !self.dialect.supports_options_without_equals()
+                {
+                    return self.expected_ref("=", self.peek_token_ref());
+                }
                 let value = self.parse_expr()?;
 
                 Ok(SqlOption::KeyValue { key: name, value })
