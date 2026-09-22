@@ -123,6 +123,63 @@ pub struct CreateDatabricksObject {
     pub clauses: Vec<Token>,
 }
 
+impl fmt::Display for CreateDatabricksObject {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "CREATE {}{} {}{}",
+            if self.or_replace { "OR REPLACE " } else { "" },
+            self.kind,
+            if self.if_not_exists {
+                "IF NOT EXISTS "
+            } else {
+                ""
+            },
+            self.name
+        )?;
+        let mut previous: Option<&Token> = None;
+        for token in &self.clauses {
+            let no_space_before = matches!(
+                token,
+                Token::Comma
+                    | Token::RParen
+                    | Token::RBracket
+                    | Token::RBrace
+                    | Token::Period
+                    | Token::Colon
+                    | Token::DoubleColon
+                    | Token::SemiColon
+            );
+            let no_space_after_previous = matches!(
+                previous,
+                Some(
+                    Token::LParen
+                        | Token::LBracket
+                        | Token::LBrace
+                        | Token::Period
+                        | Token::Colon
+                        | Token::DoubleColon
+                )
+            );
+            let function_call = matches!(token, Token::LParen)
+                && matches!(previous, Some(Token::Word(word)) if word.keyword != Keyword::WITH);
+            if previous.is_none()
+                || (!no_space_before && !no_space_after_previous && !function_call)
+            {
+                f.write_str(" ")?;
+            }
+            match token {
+                Token::SingleQuotedString(value) => {
+                    write!(f, "'{}'", escape_single_quote_string(value))?;
+                }
+                _ => write!(f, "{token}")?,
+            }
+            previous = Some(token);
+        }
+        Ok(())
+    }
+}
+
 /// Databricks table clone depth.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
