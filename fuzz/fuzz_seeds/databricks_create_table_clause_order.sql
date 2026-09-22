@@ -1,0 +1,2 @@
+CREATE TABLE events (event_date DATE) USING DELTA PARTITIONED BY (event_date);
+CREATE TABLE metrics USING DELTA COMMENT 'metrics' AS SELECT 1 AS id;

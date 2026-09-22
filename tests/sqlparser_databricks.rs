@@ -835,3 +835,13 @@ fn parse_databricks_create_table_clone() {
         .parse_sql_statements("CREATE TABLE t SHALLOW")
         .is_err());
 }
+
+#[test]
+fn parse_databricks_create_table_clause_order() {
+    for sql in [
+        "CREATE TABLE t (event_date DATE) USING DELTA PARTITIONED BY (event_date)",
+        "CREATE TABLE t USING DELTA COMMENT 'a table' TBLPROPERTIES ('quality' = 'gold') AS SELECT 1 AS id",
+    ] {
+        databricks().verified_stmt(sql);
+    }
+}
