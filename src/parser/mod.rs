@@ -276,7 +276,6 @@ impl ParserOptions {
     }
 }
 
-#[allow(dead_code)]
 struct DatabricksFunctionOptions {
     language: Option<Ident>,
     determinism: Option<FunctionDeterminismSpecifier>,
@@ -5599,7 +5598,6 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    #[allow(dead_code)]
     fn parse_function_security(&mut self) -> Result<FunctionSecurity, ParserError> {
         match self.expect_one_of_keywords(&[Keyword::DEFINER, Keyword::INVOKER])? {
             Keyword::DEFINER => Ok(FunctionSecurity::Definer),
@@ -5610,7 +5608,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    #[allow(dead_code)]
     fn parse_databricks_function_options(
         &mut self,
     ) -> Result<DatabricksFunctionOptions, ParserError> {
@@ -6142,7 +6139,10 @@ impl<'a> Parser<'a> {
         or_replace: bool,
         temporary: bool,
     ) -> Result<Statement, ParserError> {
-        if dialect_of!(self is HiveDialect) {
+        if self.dialect.supports_databricks_create_routines() {
+            self.parse_databricks_create_function(or_replace, temporary)
+                .map(Into::into)
+        } else if dialect_of!(self is HiveDialect) {
             self.parse_hive_create_function(or_replace, temporary)
                 .map(Into::into)
         } else if dialect_of!(self is PostgreSqlDialect | GenericDialect) {
@@ -6160,6 +6160,57 @@ impl<'a> Parser<'a> {
             self.prev_token();
             self.expected_ref("an object type after CREATE", self.peek_token_ref())
         }
+    }
+
+    fn parse_databricks_create_function(
+        &mut self,
+        or_replace: bool,
+        temporary: bool,
+    ) -> Result<CreateFunction, ParserError> {
+        let name = self.parse_object_name(false)?;
+        self.expect_token(&Token::LParen)?;
+        let args = if self.peek_token_ref().token == Token::RParen {
+            Vec::new()
+        } else {
+            self.parse_comma_separated(Parser::parse_function_arg)?
+        };
+        self.expect_token(&Token::RParen)?;
+        self.expect_keyword_is(Keyword::RETURNS)?;
+        let return_type = Some(self.parse_function_return_type()?);
+
+        let DatabricksFunctionOptions {
+            language,
+            determinism: determinism_specifier,
+            data_access,
+            security,
+            comment,
+            body: function_body,
+        } = self.parse_databricks_function_options()?;
+        let security_has_sql = security.is_some();
+
+        Ok(CreateFunction {
+            or_alter: false,
+            or_replace,
+            temporary,
+            if_not_exists: false,
+            name,
+            args: Some(args),
+            return_type,
+            function_body: Some(function_body),
+            language,
+            determinism_specifier,
+            options: None,
+            remote_connection: None,
+            using: None,
+            behavior: None,
+            called_on_null: None,
+            parallel: None,
+            security,
+            security_has_sql,
+            data_access,
+            comment,
+            set_params: vec![],
+        })
     }
 
     /// Parse `CREATE FUNCTION` for [PostgreSQL]
