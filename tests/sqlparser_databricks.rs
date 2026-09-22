@@ -845,3 +845,11 @@ fn parse_databricks_create_table_clause_order() {
         databricks().verified_stmt(sql);
     }
 }
+
+#[test]
+fn parse_databricks_options_without_equals() {
+    databricks().one_statement_parses_to(
+        "CREATE TABLE t USING PARQUET OPTIONS (path 's3://bucket/t')",
+        "CREATE TABLE t () USING PARQUET OPTIONS(path = 's3://bucket/t')",
+    );
+}
