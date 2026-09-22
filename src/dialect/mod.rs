@@ -1214,6 +1214,11 @@ pub trait Dialect: Debug + Any {
         false
     }
 
+    /// Returns true if this dialect supports Databricks governance and
+    /// Lakeflow object definitions such as `CREATE CATALOG` and `CREATE FLOW`.
+    fn supports_databricks_create_objects(&self) -> bool {
+        false
+    }
     /// Returns true if this dialect supports the `ARRAY` type without
     /// specifying an element type.
     ///

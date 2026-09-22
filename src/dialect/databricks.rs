@@ -186,6 +186,10 @@ impl Dialect for DatabricksDialect {
         true
     }
 
+    fn supports_databricks_create_objects(&self) -> bool {
+        true
+    }
+
     fn supports_select_wildcard_replace(&self) -> bool {
         true
     }
