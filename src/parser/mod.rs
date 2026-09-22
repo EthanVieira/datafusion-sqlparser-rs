@@ -8983,7 +8983,7 @@ impl<'a> Parser<'a> {
 
         // parse optional column list (schema)
         let (columns, constraints) = self.parse_columns()?;
-        let comment_after_column_def =
+        let mut comment_after_column_def =
             if dialect_of!(self is HiveDialect) && self.parse_keyword(Keyword::COMMENT) {
                 let next_token = self.next_token();
                 match next_token.token {
@@ -9011,9 +9011,30 @@ impl<'a> Parser<'a> {
         // SQLite supports `WITHOUT ROWID` at the end of `CREATE TABLE`
         let without_rowid = self.parse_keywords(&[Keyword::WITHOUT, Keyword::ROWID]);
 
-        let hive_distribution = self.parse_hive_distribution()?;
+        let mut hive_distribution = self.parse_hive_distribution()?;
         let clustered_by = self.parse_optional_clustered_by()?;
         let hive_formats = self.parse_hive_formats()?;
+
+        let mut hive_distribution_after_hive_formats = false;
+        if matches!(hive_distribution, HiveDistributionStyle::NONE)
+            && self
+                .dialect
+                .supports_create_table_distribution_after_format()
+        {
+            hive_distribution = self.parse_hive_distribution()?;
+            hive_distribution_after_hive_formats =
+                !matches!(hive_distribution, HiveDistributionStyle::NONE);
+        }
+
+        let mut comment_after_hive_formats = false;
+        if comment_after_column_def.is_none()
+            && self.dialect.supports_create_table_comment_after_format()
+            && hive_formats.is_some()
+            && self.parse_keyword(Keyword::COMMENT)
+        {
+            comment_after_column_def = Some(CommentDef::WithoutEq(self.parse_comment_value()?));
+            comment_after_hive_formats = true;
+        }
 
         let create_table_config = self.parse_optional_create_table_config()?;
 
@@ -9138,6 +9159,8 @@ impl<'a> Parser<'a> {
             .clone_kind(clone_kind)
             .version(version)
             .comment_after_column_def(comment_after_column_def)
+            .comment_after_hive_formats(comment_after_hive_formats)
+            .hive_distribution_after_hive_formats(hive_distribution_after_hive_formats)
             .order_by(order_by)
             .on_commit(on_commit)
             .on_cluster(on_cluster)

@@ -3240,8 +3240,10 @@ impl fmt::Display for CreateTable {
 
         // Hive table comment should be after column definitions, please refer to:
         // [Hive](https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL#LanguageManualDDL-CreateTable)
-        if let Some(comment) = &self.comment {
-            write!(f, " COMMENT '{comment}'")?;
+        if !self.comment_after_hive_formats {
+            if let Some(comment) = &self.comment {
+                write!(f, " COMMENT '{comment}'")?;
+            }
         }
 
         // Only for SQLite
@@ -3314,6 +3316,14 @@ impl fmt::Display for CreateTable {
                 if let Some(loc) = location {
                     write!(f, " LOCATION '{loc}'")?;
                 }
+            }
+        }
+        if self.hive_distribution_after_hive_formats {
+            self.fmt_hive_distribution(f)?;
+        }
+        if self.comment_after_hive_formats {
+            if let Some(comment) = &self.comment {
+                write!(f, " COMMENT '{comment}'")?;
             }
         }
         if self.external {
