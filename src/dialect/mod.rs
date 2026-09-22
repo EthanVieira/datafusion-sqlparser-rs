@@ -1152,6 +1152,17 @@ pub trait Dialect: Debug + Any {
         false
     }
 
+    /// Returns true if `CREATE VIEW` accepts `COMMENT '<text>'` without an
+    /// equals sign.
+    fn supports_create_view_comment_without_equals(&self) -> bool {
+        false
+    }
+
+    /// Returns true if `CREATE VIEW` accepts a `TBLPROPERTIES` clause.
+    fn supports_create_view_table_properties(&self) -> bool {
+        false
+    }
+
     /// Returns true if this dialect supports the `ARRAY` type without
     /// specifying an element type.
     ///

@@ -1,0 +1,1 @@
+CREATE VIEW v COMMENT 'view' TBLPROPERTIES ('quality' = 'gold') AS SELECT 1;
