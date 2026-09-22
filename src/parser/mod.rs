@@ -276,6 +276,16 @@ impl ParserOptions {
     }
 }
 
+#[allow(dead_code)]
+struct DatabricksFunctionOptions {
+    language: Option<Ident>,
+    determinism: Option<FunctionDeterminismSpecifier>,
+    data_access: Option<FunctionDataAccess>,
+    security: Option<FunctionSecurity>,
+    comment: Option<String>,
+    body: CreateFunctionBody,
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum ParserState {
     /// The default state of the parser.
@@ -5587,6 +5597,61 @@ impl<'a> Parser<'a> {
             name,
             clauses,
         }))
+    }
+
+    #[allow(dead_code)]
+    fn parse_function_security(&mut self) -> Result<FunctionSecurity, ParserError> {
+        match self.expect_one_of_keywords(&[Keyword::DEFINER, Keyword::INVOKER])? {
+            Keyword::DEFINER => Ok(FunctionSecurity::Definer),
+            Keyword::INVOKER => Ok(FunctionSecurity::Invoker),
+            unexpected => Err(ParserError::ParserError(format!(
+                "Internal parser error: expected DEFINER or INVOKER, got {unexpected:?}"
+            ))),
+        }
+    }
+
+    #[allow(dead_code)]
+    fn parse_databricks_function_options(
+        &mut self,
+    ) -> Result<DatabricksFunctionOptions, ParserError> {
+        let mut language = None;
+        let mut determinism = None;
+        let mut data_access = None;
+        let mut security = None;
+        let mut comment = None;
+        loop {
+            if self.parse_keyword(Keyword::LANGUAGE) {
+                language = Some(self.parse_identifier()?);
+            } else if self.parse_keyword(Keyword::DETERMINISTIC) {
+                determinism = Some(FunctionDeterminismSpecifier::Deterministic);
+            } else if self.parse_keywords(&[Keyword::NOT, Keyword::DETERMINISTIC]) {
+                determinism = Some(FunctionDeterminismSpecifier::NotDeterministic);
+            } else if self.parse_keywords(&[Keyword::CONTAINS, Keyword::SQL]) {
+                data_access = Some(FunctionDataAccess::ContainsSql);
+            } else if self.parse_keywords(&[Keyword::READS, Keyword::SQL, Keyword::DATA]) {
+                data_access = Some(FunctionDataAccess::ReadsSqlData);
+            } else if self.parse_keywords(&[Keyword::SQL, Keyword::SECURITY]) {
+                security = Some(self.parse_function_security()?);
+            } else if self.parse_keyword(Keyword::COMMENT) {
+                comment = Some(self.parse_comment_value()?);
+            } else if self.parse_keyword(Keyword::RETURN) {
+                let body = if self.peek_keyword(Keyword::SELECT) {
+                    CreateFunctionBody::ReturnSelect(self.parse_select()?)
+                } else {
+                    CreateFunctionBody::Return(self.parse_expr()?)
+                };
+                return Ok(DatabricksFunctionOptions {
+                    language,
+                    determinism,
+                    data_access,
+                    security,
+                    comment,
+                    body,
+                });
+            } else {
+                return self.expected_ref("RETURN in CREATE FUNCTION", self.peek_token_ref());
+            }
+        }
     }
 
     fn parse_text_search_object_type(&mut self) -> Result<TextSearchObjectType, ParserError> {
