@@ -146,6 +146,10 @@ impl Dialect for DatabricksDialect {
         true
     }
 
+    fn supports_create_or_refresh(&self) -> bool {
+        true
+    }
+
     fn supports_string_literal_backslash_escape(&self) -> bool {
         true
     }

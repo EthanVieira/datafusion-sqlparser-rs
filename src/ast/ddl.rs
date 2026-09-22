@@ -4472,6 +4472,9 @@ impl fmt::Display for CreateView {
             or_alter = if self.or_alter { "OR ALTER " } else { "" },
             or_replace = if self.or_replace { "OR REPLACE " } else { "" },
         )?;
+        if self.or_refresh {
+            f.write_str("OR REFRESH ")?;
+        }
         if let Some(ref params) = self.params {
             params.fmt(f)?;
         }
