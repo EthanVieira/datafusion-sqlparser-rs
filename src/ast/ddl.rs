@@ -56,6 +56,26 @@ use crate::display_utils::{DisplayCommaSeparated, Indent, NewLine, SpaceOrNewlin
 use crate::keywords::Keyword;
 use crate::tokenizer::{Span, Token};
 
+/// Databricks table clone depth.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum CreateTableCloneKind {
+    /// Copy only the metadata and reference the source data files.
+    Shallow,
+    /// Copy the metadata and source data files.
+    Deep,
+}
+
+impl fmt::Display for CreateTableCloneKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            Self::Shallow => "SHALLOW",
+            Self::Deep => "DEEP",
+        })
+    }
+}
+
 /// Databricks view schema adaptation mode.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
