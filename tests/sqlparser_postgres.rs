@@ -6998,11 +6998,13 @@ fn parse_trigger_related_functions() {
         create_table,
         CreateTable {
             or_replace: false,
+            or_refresh: false,
             temporary: false,
             unlogged: false,
             external: false,
             global: None,
             dynamic: false,
+            streaming: false,
             if_not_exists: false,
             transient: false,
             volatile: false,

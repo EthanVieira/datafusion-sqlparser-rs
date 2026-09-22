@@ -2949,6 +2949,8 @@ impl fmt::Display for CreateIndex {
 pub struct CreateTable {
     /// `OR REPLACE` clause
     pub or_replace: bool,
+    /// Databricks `OR REFRESH` clause
+    pub or_refresh: bool,
     /// `TEMP` or `TEMPORARY` clause
     pub temporary: bool,
     /// `UNLOGGED` clause
@@ -2957,6 +2959,8 @@ pub struct CreateTable {
     pub external: bool,
     /// `DYNAMIC` clause
     pub dynamic: bool,
+    /// Databricks `STREAMING` clause
+    pub streaming: bool,
     /// `GLOBAL` clause
     pub global: Option<bool>,
     /// `IF NOT EXISTS` clause
@@ -3144,8 +3148,9 @@ impl fmt::Display for CreateTable {
         //   `CREATE TABLE t (a INT) AS SELECT a from t2`
         write!(
             f,
-            "CREATE {or_replace}{external}{global}{multiset}{temporary}{unlogged}{transient}{volatile}{dynamic}{iceberg}{snapshot}TABLE {if_not_exists}{name}",
+            "CREATE {or_replace}{or_refresh}{external}{global}{multiset}{temporary}{unlogged}{transient}{volatile}{dynamic}{iceberg}{snapshot}{streaming}TABLE {if_not_exists}{name}",
             or_replace = if self.or_replace { "OR REPLACE " } else { "" },
+            or_refresh = if self.or_refresh { "OR REFRESH " } else { "" },
             external = if self.external { "EXTERNAL " } else { "" },
             snapshot = if self.snapshot { "SNAPSHOT " } else { "" },
             global = self.global
@@ -3168,6 +3173,7 @@ impl fmt::Display for CreateTable {
             volatile = if self.volatile { "VOLATILE " } else { "" },
             iceberg = if self.iceberg { "ICEBERG " } else { "" },
             dynamic = if self.dynamic { "DYNAMIC " } else { "" },
+            streaming = if self.streaming { "STREAMING " } else { "" },
             name = self.name,
         )?;
         if let Some(fallback) = self.fallback {
