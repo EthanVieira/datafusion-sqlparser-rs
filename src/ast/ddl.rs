@@ -223,6 +223,26 @@ impl fmt::Display for ViewSchemaMode {
     }
 }
 
+/// SQL data access declared by a routine.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum FunctionDataAccess {
+    /// The routine does not read table data.
+    ContainsSql,
+    /// The routine may read table data.
+    ReadsSqlData,
+}
+
+impl fmt::Display for FunctionDataAccess {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            Self::ContainsSql => "CONTAINS SQL",
+            Self::ReadsSqlData => "READS SQL DATA",
+        })
+    }
+}
+
 /// Index column type.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
