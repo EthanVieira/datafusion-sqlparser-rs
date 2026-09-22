@@ -934,3 +934,14 @@ fn parse_databricks_governance_and_flow_objects() {
         .parse_sql_statements("CREATE FLOW f SELECT 1")
         .is_err());
 }
+
+#[test]
+fn parse_databricks_sql_functions() {
+    for sql in [
+        "CREATE FUNCTION add_one(x INT) RETURNS INT RETURN x + 1",
+        "CREATE OR REPLACE FUNCTION f(x INT) RETURNS TABLE(id INT) DETERMINISTIC LANGUAGE SQL SQL SECURITY DEFINER COMMENT 'function' CONTAINS SQL RETURN SELECT x AS id",
+        "CREATE FUNCTION f(x INT) RETURNS INT NOT DETERMINISTIC READS SQL DATA RETURN x",
+    ] {
+        databricks().verified_stmt(sql);
+    }
+}
