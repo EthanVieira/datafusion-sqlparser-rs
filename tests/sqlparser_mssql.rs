@@ -128,6 +128,7 @@ fn parse_create_procedure() {
         ms().verified_stmt(sql),
         Statement::CreateProcedure {
             or_alter: true,
+            or_replace: false,
             body: ConditionalStatements::BeginEnd(BeginEndStatements {
                 begin_token: AttachedToken::empty(),
                 statements: vec![Statement::Query(Box::new(Query {
@@ -202,6 +203,8 @@ fn parse_create_procedure() {
                 span: Span::empty(),
             }]),
             language: None,
+            security: None,
+            comment: None,
         }
     )
 }
