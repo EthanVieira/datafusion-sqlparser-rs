@@ -4532,6 +4532,8 @@ pub enum Statement {
     /// 3. [BigQuery](https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_function_statement)
     /// 4. [MsSql](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-function-transact-sql)
     CreateFunction(CreateFunction),
+    /// A Databricks governance or Lakeflow object definition.
+    CreateDatabricksObject(CreateDatabricksObject),
     /// CREATE TRIGGER statement. See struct [CreateTrigger] for details.
     CreateTrigger(CreateTrigger),
     /// DROP TRIGGER statement. See struct [DropTrigger] for details.
@@ -5536,6 +5538,7 @@ impl fmt::Display for Statement {
                 Ok(())
             }
             Statement::CreateFunction(create_function) => create_function.fmt(f),
+            Statement::CreateDatabricksObject(create_object) => create_object.fmt(f),
             Statement::CreateDomain(create_domain) => create_domain.fmt(f),
             Statement::CreateTrigger(create_trigger) => create_trigger.fmt(f),
             Statement::DropTrigger(drop_trigger) => drop_trigger.fmt(f),

@@ -374,6 +374,7 @@ impl Spanned for Statement {
             Statement::Delete(delete) => delete.span(),
             Statement::CreateView(create_view) => create_view.span(),
             Statement::CreateTable(create_table) => create_table.span(),
+            Statement::CreateDatabricksObject(create_object) => create_object.name.span(),
             Statement::CreateVirtualTable {
                 name,
                 if_not_exists: _,
