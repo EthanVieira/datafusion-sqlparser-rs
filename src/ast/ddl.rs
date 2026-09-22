@@ -103,6 +103,26 @@ impl fmt::Display for DatabricksObjectKind {
     }
 }
 
+/// A Databricks governance or Lakeflow `CREATE` statement.
+///
+/// The object identity is structured while the rapidly evolving,
+/// object-specific clauses remain tokenized and lossless.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct CreateDatabricksObject {
+    /// `OR REPLACE` clause.
+    pub or_replace: bool,
+    /// Object type.
+    pub kind: DatabricksObjectKind,
+    /// `IF NOT EXISTS` clause.
+    pub if_not_exists: bool,
+    /// Object name.
+    pub name: ObjectName,
+    /// Tokenized object-specific clauses following the name.
+    pub clauses: Vec<Token>,
+}
+
 /// Databricks table clone depth.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
