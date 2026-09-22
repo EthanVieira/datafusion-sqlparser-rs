@@ -2993,6 +2993,8 @@ pub struct CreateTable {
     pub location: Option<String>,
     /// Query used to populate the table
     pub query: Option<Box<Query>>,
+    /// Databricks streaming table watermark clause
+    pub watermark: Option<Watermark>,
     /// If the table should be created without a rowid (SQLite)
     pub without_rowid: bool,
     /// `LIKE` clause
@@ -3466,10 +3468,30 @@ impl fmt::Display for CreateTable {
         if let Some(query) = &self.query {
             write!(f, " AS {query}")?;
         }
+        if let Some(watermark) = &self.watermark {
+            write!(f, " {watermark}")?;
+        }
         if let Some(with_data) = &self.with_data {
             write!(f, " {with_data}")?;
         }
         Ok(())
+    }
+}
+
+/// Databricks `WATERMARK event_time DELAY OF interval` clause.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct Watermark {
+    /// Event-time expression used by the watermark.
+    pub event_time: Expr,
+    /// Maximum delay accepted for the event-time expression.
+    pub delay: Expr,
+}
+
+impl fmt::Display for Watermark {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "WATERMARK {} DELAY OF {}", self.event_time, self.delay)
     }
 }
 
