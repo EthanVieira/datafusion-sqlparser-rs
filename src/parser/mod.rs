@@ -5412,6 +5412,10 @@ impl<'a> Parser<'a> {
             .map(Into::into)
         } else if self.parse_keyword(Keyword::POLICY) {
             self.parse_create_policy().map(Into::into)
+        } else if self.dialect.supports_databricks_create_objects()
+            && self.is_databricks_create_object()
+        {
+            self.parse_databricks_create_object(or_replace)
         } else if self.parse_keyword(Keyword::EXTERNAL) {
             self.parse_create_external_table(or_replace).map(Into::into)
         } else if self.parse_keyword(Keyword::FUNCTION) {
@@ -5556,6 +5560,33 @@ impl<'a> Parser<'a> {
             }
         };
         Ok(kind)
+    }
+
+    fn parse_databricks_create_object(
+        &mut self,
+        or_replace: bool,
+    ) -> Result<Statement, ParserError> {
+        let kind = self.parse_databricks_object_kind()?;
+        let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+        let name = self.parse_object_name(false)?;
+        let mut clauses = Vec::new();
+        while !matches!(self.peek_token_ref().token, Token::SemiColon | Token::EOF) {
+            clauses.push(self.next_token().token);
+        }
+        if kind == DatabricksObjectKind::Flow
+            && !clauses
+                .first()
+                .is_some_and(|token| Self::token_is_word(token, "AS"))
+        {
+            return self.expected_ref("AS after CREATE FLOW name", self.peek_token_ref());
+        }
+        Ok(Statement::CreateDatabricksObject(CreateDatabricksObject {
+            or_replace,
+            kind,
+            if_not_exists,
+            name,
+            clauses,
+        }))
     }
 
     fn parse_text_search_object_type(&mut self) -> Result<TextSearchObjectType, ParserError> {
