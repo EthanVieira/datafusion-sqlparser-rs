@@ -4022,7 +4022,17 @@ impl fmt::Display for CreateFunction {
             write!(f, " {parallel}")?;
         }
         if let Some(security) = &self.security {
-            write!(f, " {security}")?;
+            write!(
+                f,
+                " {}{security}",
+                if self.security_has_sql { "SQL " } else { "" }
+            )?;
+        }
+        if let Some(comment) = &self.comment {
+            write!(f, " COMMENT '{}'", escape_single_quote_string(comment))?;
+        }
+        if let Some(data_access) = &self.data_access {
+            write!(f, " {data_access}")?;
         }
         for set_param in &self.set_params {
             write!(f, " {set_param}")?;
@@ -4045,6 +4055,9 @@ impl fmt::Display for CreateFunction {
         }
         if let Some(CreateFunctionBody::AsReturnSelect(function_body)) = &self.function_body {
             write!(f, " AS RETURN {function_body}")?;
+        }
+        if let Some(CreateFunctionBody::ReturnSelect(function_body)) = &self.function_body {
+            write!(f, " RETURN {function_body}")?;
         }
         if let Some(using) = &self.using {
             write!(f, " {using}")?;
