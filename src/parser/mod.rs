@@ -6968,6 +6968,8 @@ impl<'a> Parser<'a> {
             materialized,
             secure,
             or_replace,
+            or_refresh: false,
+            schema_mode: None,
             options,
             cluster_by,
             comment,

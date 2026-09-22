@@ -4414,6 +4414,10 @@ pub struct CreateView {
     pub or_alter: bool,
     /// The `OR REPLACE` clause is used to re-create the view if it already exists.
     pub or_replace: bool,
+    /// Databricks `OR REFRESH` clause for materialized views.
+    pub or_refresh: bool,
+    /// Databricks view schema adaptation mode.
+    pub schema_mode: Option<ViewSchemaMode>,
     /// if true, has MATERIALIZED view modifier
     pub materialized: bool,
     /// Snowflake: SECURE view modifier
