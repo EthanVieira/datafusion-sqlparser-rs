@@ -5498,6 +5498,28 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn token_is_word(token: &Token, expected: &str) -> bool {
+        matches!(token, Token::Word(word) if word.value.eq_ignore_ascii_case(expected))
+    }
+
+    fn peek_word(&self, offset: usize, expected: &str) -> bool {
+        Self::token_is_word(&self.peek_nth_token_ref(offset).token, expected)
+    }
+
+    fn is_databricks_create_object(&self) -> bool {
+        self.peek_word(0, "FLOW")
+            || self.peek_word(0, "CATALOG")
+            || self.peek_word(0, "VOLUME")
+            || self.peek_word(0, "CONNECTION")
+            || self.peek_word(0, "SHARE")
+            || self.peek_word(0, "RECIPIENT")
+            || self.peek_word(0, "PROVIDER")
+            || (self.peek_word(0, "EXTERNAL")
+                && (self.peek_word(1, "VOLUME") || self.peek_word(1, "LOCATION")))
+            || (self.peek_word(0, "STORAGE") && self.peek_word(1, "CREDENTIAL"))
+            || (self.peek_word(0, "FOREIGN") && self.peek_word(1, "CATALOG"))
+    }
+
     fn parse_text_search_object_type(&mut self) -> Result<TextSearchObjectType, ParserError> {
         match self.expect_one_of_keywords(&[
             Keyword::DICTIONARY,
