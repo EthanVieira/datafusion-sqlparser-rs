@@ -29,7 +29,7 @@ use crate::ast::{
     DistStyle, Expr, FileFormat, ForValues, HiveDistributionStyle, HiveFormat, Ident,
     InitializeKind, ObjectName, OnCommit, OneOrManyWithParens, Query, RefreshModeKind,
     RowAccessPolicy, Statement, StorageLifecyclePolicy, StorageSerializationPolicy,
-    TableConstraint, TableVersion, Tag, WithData, WrappedCollection,
+    TableConstraint, TableVersion, Tag, Watermark, WithData, WrappedCollection,
 };
 
 use crate::parser::ParserError;
@@ -107,6 +107,8 @@ pub struct CreateTableBuilder {
     pub location: Option<String>,
     /// Optional `AS SELECT` query for the table.
     pub query: Option<Box<Query>>,
+    /// Optional Databricks watermark clause.
+    pub watermark: Option<Watermark>,
     /// Whether `WITHOUT ROWID` is set.
     pub without_rowid: bool,
     /// Optional `LIKE` clause kind.
@@ -225,6 +227,7 @@ impl CreateTableBuilder {
             file_format: None,
             location: None,
             query: None,
+            watermark: None,
             without_rowid: false,
             like: None,
             clone: None,
@@ -285,6 +288,11 @@ impl CreateTableBuilder {
     /// Mark the table as a Databricks streaming table.
     pub fn streaming(mut self, streaming: bool) -> Self {
         self.streaming = streaming;
+        self
+    }
+    /// Set the Databricks watermark clause.
+    pub fn watermark(mut self, watermark: Option<Watermark>) -> Self {
+        self.watermark = watermark;
         self
     }
     /// Mark the table as `TEMPORARY`.
@@ -638,6 +646,7 @@ impl CreateTableBuilder {
             file_format: self.file_format,
             location: self.location,
             query: self.query,
+            watermark: self.watermark,
             without_rowid: self.without_rowid,
             like: self.like,
             clone: self.clone,
@@ -726,6 +735,7 @@ impl From<CreateTable> for CreateTableBuilder {
             file_format: table.file_format,
             location: table.location,
             query: table.query,
+            watermark: table.watermark,
             without_rowid: table.without_rowid,
             like: table.like,
             clone: table.clone,

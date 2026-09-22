@@ -572,6 +572,7 @@ impl Spanned for CreateTable {
             file_format: _,       // enum
             location: _,          // string, no span
             query,
+            watermark: _,
             without_rowid: _, // bool
             like: _,
             clone,
