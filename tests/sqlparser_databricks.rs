@@ -912,3 +912,25 @@ fn parse_databricks_create_schema() {
         "CREATE SCHEMA IF NOT EXISTS analytics.reporting COMMENT 'reporting' LOCATION 's3://bucket/reporting' WITH DBPROPERTIES (owner = 'analytics')",
     );
 }
+
+#[test]
+fn parse_databricks_governance_and_flow_objects() {
+    for sql in [
+        "CREATE FLOW f AS INSERT INTO target BY NAME SELECT * FROM STREAM(source)",
+        "CREATE CATALOG IF NOT EXISTS analytics COMMENT 'analytics'' catalog'",
+        "CREATE VOLUME analytics.reporting.files COMMENT 'managed files'",
+        "CREATE EXTERNAL VOLUME analytics.reporting.files LOCATION 's3://bucket/files'",
+        "CREATE STORAGE CREDENTIAL credential_name WITH AWS_IAM_ROLE(ROLE_ARN = 'arn:example')",
+        "CREATE EXTERNAL LOCATION location_name URL 's3://bucket/path' WITH (STORAGE CREDENTIAL credential_name)",
+        "CREATE FOREIGN CATALOG foreign_catalog USING CONNECTION connection_name OPTIONS(database 'db')",
+        "CREATE CONNECTION connection_name TYPE POSTGRESQL OPTIONS(host 'db.example.com')",
+        "CREATE SHARE share_name COMMENT 'shared data'",
+        "CREATE RECIPIENT recipient_name",
+        "CREATE PROVIDER provider_name COMMENT 'provider'",
+    ] {
+        databricks().verified_stmt(sql);
+    }
+    assert!(databricks()
+        .parse_sql_statements("CREATE FLOW f SELECT 1")
+        .is_err());
+}
