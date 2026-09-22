@@ -44,6 +44,7 @@ use core::ops::ControlFlow;
 #[cfg(feature = "visitor")]
 use sqlparser_derive::{Visit, VisitMut};
 
+use self::value::escape_single_quote_string;
 use crate::{
     display_utils::SpaceOrNewline,
     tokenizer::{Span, Token},
@@ -4454,6 +4455,12 @@ pub enum Statement {
         ///
         /// [BigQuery](https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_schema_statement)
         default_collate_spec: Option<Expr>,
+        /// Databricks schema comment.
+        comment: Option<String>,
+        /// Databricks managed storage location.
+        location: Option<String>,
+        /// Databricks schema properties.
+        dbproperties: Option<Vec<SqlOption>>,
         /// Clones a schema
         ///
         /// ```sql
@@ -6104,6 +6111,9 @@ impl fmt::Display for Statement {
                 with,
                 options,
                 default_collate_spec,
+                comment,
+                location,
+                dbproperties,
                 clone,
             } => {
                 write!(
@@ -6128,6 +6138,19 @@ impl fmt::Display for Statement {
 
                 if let Some(clone) = clone {
                     write!(f, " CLONE {clone}")?;
+                }
+                if let Some(comment) = comment {
+                    write!(f, " COMMENT '{}'", escape_single_quote_string(comment))?;
+                }
+                if let Some(location) = location {
+                    write!(f, " LOCATION '{}'", escape_single_quote_string(location))?;
+                }
+                if let Some(dbproperties) = dbproperties {
+                    write!(
+                        f,
+                        " WITH DBPROPERTIES ({})",
+                        display_comma_separated(dbproperties)
+                    )?;
                 }
                 Ok(())
             }
