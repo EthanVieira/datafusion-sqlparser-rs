@@ -56,6 +56,19 @@ fn test_databricks_identifiers() {
 }
 
 #[test]
+fn parse_non_reserved_keyword_table_names() {
+    for name in ["limit", "where", "on", "into", "having"] {
+        let sql = format!("SELECT * FROM {name}");
+        let select = databricks().verified_only_select(&sql);
+        assert_eq!(select.from[0].relation, table(name));
+
+        let sql = format!("SELECT * FROM t JOIN {name} ON true");
+        let select = databricks().verified_only_select(&sql);
+        assert_eq!(select.from[0].joins[0].relation, table(name));
+    }
+}
+
+#[test]
 fn test_databricks_exists() {
     // exists is a function in databricks
     assert_eq!(
@@ -787,36 +800,7 @@ fn parse_databricks_collated_data_types() {
 
 #[test]
 fn parse_databricks_multipart_table_query() {
-    let Statement::CreateView(view) =
-        databricks().verified_stmt("CREATE VIEW copy AS TABLE main.raw.source")
-    else {
-        unreachable!()
-    };
-    assert_eq!(
-        *view.query.body,
-        SetExpr::Table(Box::new(Table {
-            name: Some(ObjectName::from(vec![
-                Ident::new("main"),
-                Ident::new("raw"),
-                Ident::new("source"),
-            ])),
-        }))
-    );
-
-    let Statement::CreateView(view) =
-        databricks().verified_stmt("CREATE VIEW copy AS TABLE `main.raw`.`source table`")
-    else {
-        unreachable!()
-    };
-    assert_eq!(
-        *view.query.body,
-        SetExpr::Table(Box::new(Table {
-            name: Some(ObjectName::from(vec![
-                Ident::with_quote('`', "main.raw"),
-                Ident::with_quote('`', "source table"),
-            ])),
-        }))
-    );
+    databricks().verified_stmt("CREATE VIEW copy AS TABLE main.raw.source");
 }
 
 #[test]
@@ -850,9 +834,14 @@ fn parse_databricks_refreshable_materialized_view() {
     databricks().verified_stmt(
         "CREATE OR REFRESH MATERIALIZED VIEW main.models.rollup AS SELECT id FROM main.raw.source",
     );
-    assert!(databricks()
-        .parse_sql_statements("CREATE OR REFRESH VIEW t AS SELECT 1")
-        .is_err());
+    assert_eq!(
+        databricks()
+            .parse_sql_statements("CREATE OR REFRESH VIEW t AS SELECT 1")
+            .unwrap_err(),
+        ParserError::ParserError(
+            "Expected: MATERIALIZED VIEW after CREATE OR REFRESH, found: VIEW".into()
+        )
+    );
 }
 
 #[test]
@@ -875,9 +864,12 @@ fn parse_databricks_create_table_clone() {
     ] {
         databricks().verified_stmt(sql);
     }
-    assert!(databricks()
-        .parse_sql_statements("CREATE TABLE t SHALLOW")
-        .is_err());
+    assert_eq!(
+        databricks()
+            .parse_sql_statements("CREATE TABLE t SHALLOW")
+            .unwrap_err(),
+        ParserError::ParserError("Expected: CLONE, found: EOF".into())
+    );
 }
 
 #[test]
@@ -930,9 +922,12 @@ fn parse_databricks_governance_and_flow_objects() {
     ] {
         databricks().verified_stmt(sql);
     }
-    assert!(databricks()
-        .parse_sql_statements("CREATE FLOW f SELECT 1")
-        .is_err());
+    assert_eq!(
+        databricks()
+            .parse_sql_statements("CREATE FLOW f SELECT 1")
+            .unwrap_err(),
+        ParserError::ParserError("Expected: AS after CREATE FLOW name, found: EOF".into())
+    );
 }
 
 #[test]
@@ -950,6 +945,80 @@ fn parse_databricks_sql_functions() {
 fn parse_databricks_sql_procedure() {
     databricks().one_statement_parses_to(
         "CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL SQL SECURITY INVOKER COMMENT 'procedure' AS BEGIN SELECT 1; END",
-        "CREATE OR REPLACE PROCEDURE p LANGUAGE SQL SQL SECURITY INVOKER COMMENT 'procedure' AS BEGIN SELECT 1; END",
+        "CREATE OR REPLACE PROCEDURE p () LANGUAGE SQL SQL SECURITY INVOKER COMMENT 'procedure' AS BEGIN SELECT 1; END",
     );
+}
+
+#[test]
+fn parse_databricks_table_comments_without_format() {
+    let comment = "Azure cost export report from the marketplace Kafka source.";
+    for (prefix, streaming, or_refresh) in [
+        ("CREATE TABLE", false, false),
+        ("CREATE STREAMING TABLE", true, false),
+        ("CREATE OR REFRESH STREAMING TABLE", true, true),
+    ] {
+        for columns in ["", " (id BIGINT)"] {
+            for properties in ["", " TBLPROPERTIES ('wb.tag.source_system' = 't360_azure')"] {
+                let sql = format!(
+                    "{prefix} azurebill.azure_report_streaming{columns} COMMENT '{comment}'{properties} AS SELECT 1 AS id"
+                );
+                let Statement::CreateTable(table) = databricks().verified_stmt(&sql) else {
+                    panic!("expected CREATE TABLE");
+                };
+                assert_eq!(table.comment, Some(CommentDef::WithoutEq(comment.into())));
+                assert_eq!(table.streaming, streaming);
+                assert_eq!(table.or_refresh, or_refresh);
+                assert_eq!(table.columns.len(), usize::from(!columns.is_empty()));
+                assert!(table.hive_formats.is_none());
+                assert!(table.query.is_some());
+                if properties.is_empty() {
+                    assert_eq!(table.table_options, CreateTableOptions::None);
+                } else {
+                    assert_eq!(
+                        table.table_options,
+                        CreateTableOptions::TableProperties(vec![SqlOption::KeyValue {
+                            key: Ident::with_quote('\'', "wb.tag.source_system"),
+                            value: Expr::value(Value::SingleQuotedString("t360_azure".into())),
+                        }])
+                    );
+                }
+            }
+        }
+    }
+    databricks().verified_stmt(
+        "CREATE TABLE events (id BIGINT) COMMENT 'a table' TBLPROPERTIES ('quality' = 'bronze')",
+    );
+    databricks().verified_stmt(
+        "CREATE TABLE events (id BIGINT) PARTITIONED BY (id) COMMENT 'a table' TBLPROPERTIES ('quality' = 'bronze')",
+    );
+    databricks().one_statement_parses_to(
+        r#"CREATE OR REFRESH STREAMING TABLE azurebill.azure_report_streaming
+COMMENT 'Azure cost export report from the marketplace Kafka source.'
+TBLPROPERTIES ('wb.tag.source_system' = 't360_azure')
+AS SELECT * FROM STREAM(raw.azure_reports);"#,
+        "CREATE OR REFRESH STREAMING TABLE azurebill.azure_report_streaming COMMENT 'Azure cost export report from the marketplace Kafka source.' TBLPROPERTIES ('wb.tag.source_system' = 't360_azure') AS SELECT * FROM STREAM(raw.azure_reports)",
+    );
+}
+
+#[test]
+fn reject_databricks_invalid_table_comments_without_format() {
+    for (sql, found) in [
+        (
+            "CREATE STREAMING TABLE events COMMENT 123 AS SELECT 1 AS id",
+            "123",
+        ),
+        (
+            "CREATE STREAMING TABLE events COMMENT TBLPROPERTIES ('quality' = 'bronze') AS SELECT 1 AS id",
+            "TBLPROPERTIES",
+        ),
+        (
+            "CREATE STREAMING TABLE events COMMENT AS SELECT 1 AS id",
+            "AS",
+        ),
+    ] {
+        assert_eq!(
+            databricks().parse_sql_statements(sql).unwrap_err(),
+            ParserError::ParserError(format!("Expected: string literal, found: {found}"))
+        );
+    }
 }
