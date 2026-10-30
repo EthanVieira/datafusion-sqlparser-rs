@@ -9277,7 +9277,7 @@ impl<'a> Parser<'a> {
         let mut comment_after_hive_formats = false;
         if comment_after_column_def.is_none()
             && self.dialect.supports_create_table_comment_after_format()
-            && hive_formats.is_some()
+            && self.peek_nth_token_ref(1).token != Token::Eq
             && self.parse_keyword(Keyword::COMMENT)
         {
             comment_after_column_def = Some(CommentDef::WithoutEq(self.parse_comment_value()?));

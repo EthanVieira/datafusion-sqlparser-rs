@@ -1203,7 +1203,7 @@ pub trait Dialect: Debug + Any {
         false
     }
 
-    /// Returns true if a table comment may follow the storage format.
+    /// Returns true if a table comment may follow the optional storage format.
     fn supports_create_table_comment_after_format(&self) -> bool {
         false
     }
