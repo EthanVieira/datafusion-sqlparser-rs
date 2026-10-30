@@ -41,12 +41,16 @@ fn test_method_overrides() {
     assert!(!dialect.supports_factorial_operator());
 
     // Parsing works with the overrides
-    let result = Parser::new(&dialect)
+    let statements = Parser::new(&dialect)
         .try_with_sql("SELECT '''value''' FROM t ORDER BY ALL")
         .unwrap()
-        .parse_statements();
-
-    assert!(result.is_ok());
+        .parse_statements()
+        .unwrap();
+    assert_eq!(statements.len(), 1);
+    assert_eq!(
+        statements[0].to_string(),
+        "SELECT '''value''' FROM t ORDER BY ALL"
+    );
 }
 
 #[test]
@@ -189,4 +193,30 @@ fn test_lambda_keyword_syntax_with_json_arrow_operator() {
         panic!("expected `->` to stay a binary operator");
     };
     assert_eq!(&BinaryOperator::Arrow, op);
+}
+
+#[test]
+fn test_literal_leading_char_expression_override() {
+    derive_dialect!(LiteralExpressionDialect, GenericDialect, overrides = {
+        is_identifier_start = '_' == ch || ch.is_ascii_alphabetic(),
+    });
+    let dialect = LiteralExpressionDialect::new();
+
+    assert!(dialect.is_identifier_start('_'));
+    assert!(dialect.is_identifier_start('a'));
+    assert!(!dialect.is_identifier_start('1'));
+}
+
+#[test]
+fn test_literal_leading_bool_expression_override() {
+    derive_dialect!(LiteralExpressionDialect, GenericDialect, overrides = {
+        ordered_bind_placeholder_style =
+            true.then_some(sqlparser::dialect::BindPlaceholderStyle::DollarNumbered),
+    });
+    let dialect = LiteralExpressionDialect::new();
+
+    assert_eq!(
+        dialect.ordered_bind_placeholder_style(),
+        Some(sqlparser::dialect::BindPlaceholderStyle::DollarNumbered)
+    );
 }

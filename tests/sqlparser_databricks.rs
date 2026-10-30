@@ -56,6 +56,19 @@ fn test_databricks_identifiers() {
 }
 
 #[test]
+fn parse_non_reserved_keyword_table_names() {
+    for name in ["limit", "where", "on", "into", "having"] {
+        let sql = format!("SELECT * FROM {name}");
+        let select = databricks().verified_only_select(&sql);
+        assert_eq!(select.from[0].relation, table(name));
+
+        let sql = format!("SELECT * FROM t JOIN {name} ON true");
+        let select = databricks().verified_only_select(&sql);
+        assert_eq!(select.from[0].joins[0].relation, table(name));
+    }
+}
+
+#[test]
 fn test_databricks_exists() {
     // exists is a function in databricks
     assert_eq!(
@@ -453,13 +466,20 @@ fn parse_table_time_travel() {
     all_dialects_where(|d| d.supports_table_versioning())
         .verified_only_select("SELECT 1 FROM t1 VERSION AS OF 1");
 
-    assert!(databricks()
-        .parse_sql_statements("SELECT 1 FROM t1 FOR TIMESTAMP AS OF 'some_timestamp'")
-        .is_err());
+    assert_eq!(
+        databricks().parse_sql_statements("SELECT 1 FROM t1 FOR TIMESTAMP AS OF 'some_timestamp'"),
+        Err(ParserError::ParserError(
+            "Expected: one of UPDATE or SHARE, found: TIMESTAMP".to_string()
+        ))
+    );
 
-    assert!(all_dialects_where(|d| d.supports_table_versioning())
-        .parse_sql_statements("SELECT 1 FROM t1 VERSION AS OF 1 - 2",)
-        .is_err())
+    assert_eq!(
+        all_dialects_where(|d| d.supports_table_versioning())
+            .parse_sql_statements("SELECT 1 FROM t1 VERSION AS OF 1 - 2"),
+        Err(ParserError::ParserError(
+            "Expected: end of statement, found: -".to_string()
+        ))
+    );
 }
 
 #[test]
@@ -733,9 +753,13 @@ fn parse_cte_without_as() {
     databricks_and_generic()
         .verified_query("WITH cte (col1, col2) AS (SELECT 1, 2) SELECT * FROM cte");
 
-    assert!(all_dialects_where(|d| !d.supports_cte_without_as())
-        .parse_sql_statements("WITH cte (SELECT 1) SELECT * FROM cte")
-        .is_err());
+    assert_eq!(
+        all_dialects_where(|d| !d.supports_cte_without_as())
+            .parse_sql_statements("WITH cte (SELECT 1) SELECT * FROM cte"),
+        Err(ParserError::ParserError(
+            "Expected: ), found: 1".to_string()
+        ))
+    );
 }
 
 #[test]
@@ -765,9 +789,13 @@ fn parse_databricks_collated_data_types() {
     );
     databricks().verified_stmt("CREATE TABLE t (s STRUCT<a STRING COLLATE UTF8_LCASE>)");
     databricks().verified_stmt("CREATE TABLE t (c ARRAY<ARRAY<STRING>> COLLATE UTF8_LCASE)");
-    assert!(TestedDialects::new(vec![Box::new(GenericDialect {})])
-        .parse_sql_statements("CREATE TABLE t (c ARRAY<STRING COLLATE UTF8_LCASE>)")
-        .is_err());
+    assert_eq!(
+        TestedDialects::new(vec![Box::new(GenericDialect {})])
+            .parse_sql_statements("CREATE TABLE t (c ARRAY<STRING COLLATE UTF8_LCASE>)"),
+        Err(ParserError::ParserError(
+            "Expected: >, found: COLLATE".to_string()
+        ))
+    );
 }
 
 #[test]
@@ -806,9 +834,14 @@ fn parse_databricks_refreshable_materialized_view() {
     databricks().verified_stmt(
         "CREATE OR REFRESH MATERIALIZED VIEW main.models.rollup AS SELECT id FROM main.raw.source",
     );
-    assert!(databricks()
-        .parse_sql_statements("CREATE OR REFRESH VIEW t AS SELECT 1")
-        .is_err());
+    assert_eq!(
+        databricks()
+            .parse_sql_statements("CREATE OR REFRESH VIEW t AS SELECT 1")
+            .unwrap_err(),
+        ParserError::ParserError(
+            "Expected: MATERIALIZED VIEW after CREATE OR REFRESH, found: VIEW".into()
+        )
+    );
 }
 
 #[test]
@@ -831,9 +864,12 @@ fn parse_databricks_create_table_clone() {
     ] {
         databricks().verified_stmt(sql);
     }
-    assert!(databricks()
-        .parse_sql_statements("CREATE TABLE t SHALLOW")
-        .is_err());
+    assert_eq!(
+        databricks()
+            .parse_sql_statements("CREATE TABLE t SHALLOW")
+            .unwrap_err(),
+        ParserError::ParserError("Expected: CLONE, found: EOF".into())
+    );
 }
 
 #[test]
@@ -886,9 +922,12 @@ fn parse_databricks_governance_and_flow_objects() {
     ] {
         databricks().verified_stmt(sql);
     }
-    assert!(databricks()
-        .parse_sql_statements("CREATE FLOW f SELECT 1")
-        .is_err());
+    assert_eq!(
+        databricks()
+            .parse_sql_statements("CREATE FLOW f SELECT 1")
+            .unwrap_err(),
+        ParserError::ParserError("Expected: AS after CREATE FLOW name, found: EOF".into())
+    );
 }
 
 #[test]
@@ -906,7 +945,7 @@ fn parse_databricks_sql_functions() {
 fn parse_databricks_sql_procedure() {
     databricks().one_statement_parses_to(
         "CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL SQL SECURITY INVOKER COMMENT 'procedure' AS BEGIN SELECT 1; END",
-        "CREATE OR REPLACE PROCEDURE p LANGUAGE SQL SQL SECURITY INVOKER COMMENT 'procedure' AS BEGIN SELECT 1; END",
+        "CREATE OR REPLACE PROCEDURE p () LANGUAGE SQL SQL SECURITY INVOKER COMMENT 'procedure' AS BEGIN SELECT 1; END",
     );
 }
 

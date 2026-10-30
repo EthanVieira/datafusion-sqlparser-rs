@@ -1575,9 +1575,12 @@ fn parse_table_identifiers() {
         );
     }
 
-    fn test_table_ident_err(ident: &str) {
+    fn test_table_ident_err(ident: &str, expected: &str) {
         let sql = format!("SELECT 1 FROM {ident}");
-        assert!(bigquery().parse_sql_statements(&sql).is_err());
+        assert_eq!(
+            bigquery().parse_sql_statements(&sql),
+            Err(ParserError::ParserError(expected.to_string()))
+        );
     }
 
     test_table_ident("`spa ce`", None, vec![Ident::with_quote('`', "spa ce")]);
@@ -1599,7 +1602,7 @@ fn parse_table_identifiers() {
         vec![Ident::with_quote('`', "5abc"), Ident::new("dataField")],
     );
 
-    test_table_ident_err("5abc.dataField");
+    test_table_ident_err("5abc.dataField", "Expected: identifier, found: 5");
 
     test_table_ident(
         "abc5.dataField",
@@ -1607,7 +1610,7 @@ fn parse_table_identifiers() {
         vec![Ident::new("abc5"), Ident::new("dataField")],
     );
 
-    test_table_ident_err("abc5!.dataField");
+    test_table_ident_err("abc5!.dataField", "Expected: end of statement, found: !");
 
     test_table_ident(
         "`GROUP`.dataField",
@@ -1688,12 +1691,21 @@ fn parse_table_identifiers() {
         vec![Ident::new("foo-bar"), Ident::new("baz-123")],
     );
 
-    test_table_ident_err("foo-`bar`");
-    test_table_ident_err("`foo`-bar");
-    test_table_ident_err("foo-123a");
-    test_table_ident_err("foo - bar");
-    test_table_ident_err("123-bar");
-    test_table_ident_err("bar-");
+    test_table_ident_err(
+        "foo-`bar`",
+        "Expected: continuation of hyphenated identifier, found: `bar`",
+    );
+    test_table_ident_err("`foo`-bar", "Expected: end of statement, found: -");
+    test_table_ident_err(
+        "foo-123a",
+        "Expected: whitespace following hyphenated identifier, found: a",
+    );
+    test_table_ident_err("foo - bar", "Expected: end of statement, found: -");
+    test_table_ident_err("123-bar", "Expected: identifier, found: 123");
+    test_table_ident_err(
+        "bar-",
+        "Expected: continuation of hyphenated identifier, found: EOF",
+    );
 }
 
 #[test]
@@ -1755,14 +1767,19 @@ fn parse_table_time_travel() {
                 with_ordinality: false,
                 json_path: None,
                 sample: None,
-                index_hints: vec![],
+                index_directives: vec![],
             },
             joins: vec![]
         },]
     );
 
     let sql = "SELECT 1 FROM t1 FOR SYSTEM TIME AS OF 'some_timestamp'".to_string();
-    assert!(bigquery().parse_sql_statements(&sql).is_err());
+    assert_eq!(
+        bigquery().parse_sql_statements(&sql),
+        Err(ParserError::ParserError(
+            "Expected: one of UPDATE or SHARE, found: SYSTEM".to_string()
+        ))
+    );
 }
 
 #[test]
@@ -1865,7 +1882,7 @@ fn parse_merge() {
                     with_ordinality: false,
                     json_path: None,
                     sample: None,
-                    index_hints: vec![],
+                    index_directives: vec![],
                 },
                 table
             );
@@ -1880,7 +1897,7 @@ fn parse_merge() {
                     with_ordinality: false,
                     json_path: None,
                     sample: None,
-                    index_hints: vec![],
+                    index_directives: vec![],
                 },
                 source
             );
@@ -2174,7 +2191,7 @@ fn parse_big_query_declare() {
         ),
     ] {
         match bigquery().verified_stmt(sql) {
-            Statement::Declare { mut stmts } => {
+            Statement::Declare { mut stmts, .. } => {
                 assert_eq!(1, stmts.len());
                 let Declare {
                     names,
